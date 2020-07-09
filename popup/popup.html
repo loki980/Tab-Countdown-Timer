@@ -1,0 +1,36 @@
+<html>
+    <head>
+        
+        <meta charset="utf-8" />
+        <style>
+            body {
+                width: 500px;
+            }
+            button {
+                background-color: #336dab;
+                border: none;
+                color: white;
+                padding: 15px 32px;
+                text-align: center;
+                font-size: 16px;
+            }
+        </style>
+    </head>
+    <body>
+        <h2>Tab countdown timer</h2>
+
+        <label for="hours">Hours:</label>
+        <input type="text" id="hours" name="hours" value="0"><br><br>
+
+        <label for="minutes">Minutes:</label>
+        <input type="text" id="minutes" name="minutes" value="0"><br><br>
+
+        <label for="seconds">Seconds:</label>
+        <input type="text" id="seconds" name="seconds" value="0"><br><br>
+
+        <button id="sendmessageid">Set timer.</button>
+
+        <script src="/lib/jquery-3.5.1.min.js"></script>
+        <script src="popup.js"></script>
+    </body>
+</html>
