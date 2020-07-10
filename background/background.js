@@ -1,16 +1,15 @@
+// When an alarm expires, close the tab
 chrome.alarms.onAlarm.addListener(function(alarm) {
     chrome.tabs.remove(Number(alarm.name));
 });
 
-
-
+// When the user closes a tab, clear the associated alarm
 function HandleRemove(tabId, removeInfo) {
     chrome.alarms.clear(tabId.toString()) 
 }
 chrome.tabs.onRemoved.addListener(HandleRemove);
 
-
-
+// Pretty formatting for a date diff (duration)
 function FormatDuration(d) {
     if (d < 0) {
         return "?";
@@ -24,10 +23,9 @@ function FormatDuration(d) {
     return Math.floor(d / divisor[0]) + ":" + pad(Math.floor((d % divisor[0]) / divisor[1]));
 }
 
-chrome.browserAction.setBadgeText({ 'text': '?'});
 chrome.browserAction.setBadgeBackgroundColor({ 'color': "#777" });
-//chrome.browserAction.setPopup() can set a tooltip I think.
 
+// Set the extension badge to the time remaining every second.
 function UpdateBadges() {
     var now = new Date();
 
@@ -39,4 +37,3 @@ function UpdateBadges() {
     });
 }
 setInterval(UpdateBadges, 1000);
-

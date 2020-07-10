@@ -1,3 +1,4 @@
+// Create tab countdown timer when the user sets one
 $("#setTimer").bind('click', function(e){
     chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         // name of the alarm is just the id of the active tab
@@ -17,8 +18,9 @@ $("#setTimer").bind('click', function(e){
     window.close();
 });
 
+
+// Increase text inputs by 1 on mousewheelup, down by 1 on mousewheel down
 $(":text").bind('mousewheel', function(e){
-    // Increase text inputs by 1 on mousewheelup, down by 1 on mousewheel down
     if(e.originalEvent.wheelDelta /120 > 0) {
         this.value++;
     }
@@ -29,6 +31,7 @@ $(":text").bind('mousewheel', function(e){
     fixOverflowAndUnderflows();
 });
 
+// Address invalid timers
 function fixOverflowAndUnderflows() {
     // Get rid of negatives
     if($("#hours")[0].value < 0) {
@@ -45,6 +48,7 @@ function fixOverflowAndUnderflows() {
     }
 }
 
+// Display and update countdown on the popup.
 chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
     chrome.alarms.get(tabs[0].id.toString(), function(alarms) {
         if(alarms != null) {
