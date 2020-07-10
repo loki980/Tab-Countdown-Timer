@@ -33,7 +33,7 @@ function UpdateBadges() {
 
     chrome.alarms.getAll(function(alarms) { 
         for(alarm of alarms) {
-            var description = FormatDuration(now - alarm.scheduledTime);
+            var description = FormatDuration(alarm.scheduledTime - now);
             chrome.browserAction.setBadgeText({ 'tabId': parseInt(alarm.name), 'text': description});
         }        
     });
