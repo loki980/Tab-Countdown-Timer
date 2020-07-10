@@ -6,7 +6,6 @@ $("#setTimer").bind('click', function(e){
         function getCloseTimeInSeconds() {
             var seconds = 0;
             
-            seconds += Number($("#seconds")[0].value);
             seconds += Number($("#minutes")[0].value * 60);
             seconds += Number($("#hours")[0].value * 60 * 60);
         
@@ -37,15 +36,6 @@ function fixOverflowAndUnderflows() {
     }
     if($("#minutes")[0].value < 0) {
         $("#minutes")[0].value = 0;
-    }
-    if($("#seconds")[0].value < 0) {
-        $("#seconds")[0].value = 0;
-    }
-
-    // 61 seconds -> 1 minute, 1 second
-    if($("#seconds")[0].value > 60) {
-        $("#seconds")[0].value -= 60;
-        $("#minutes")[0].value++;
     }
 
     // 61 minutes -> 1 hour, 1 minute
