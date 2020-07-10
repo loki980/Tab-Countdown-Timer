@@ -1,6 +1,6 @@
 $("#setTimer").bind('click', function(e){
     chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-        // name of the alarm is just the id of the tab
+        // name of the alarm is just the id of the active tab
         chrome.alarms.create(tabs[0].id.toString(), {delayInMinutes: getCloseTimeInSeconds()/60} );
         
         function getCloseTimeInSeconds() {
@@ -13,6 +13,9 @@ $("#setTimer").bind('click', function(e){
             return seconds;
         }
     });
+
+    // Close the popup
+    window.close();
 });
 
 $(":text").bind('mousewheel', function(e){
