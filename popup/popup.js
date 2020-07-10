@@ -1,10 +1,8 @@
 $("#setTimer").bind('click', function(e){
     chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-        // set a timer to close the tab after the specified time
-        setTimeout(function() { 
-            chrome.tabs.remove(tabs[0].id);
-        }, getCloseTimeInSeconds()*1000);
-
+        // name of the alarm is just the id of the tab
+        chrome.alarms.create(tabs[0].id.toString(), {delayInMinutes: getCloseTimeInSeconds()/60} );
+        
         function getCloseTimeInSeconds() {
             var seconds = 0;
             

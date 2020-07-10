@@ -19,5 +19,10 @@
             ],
             "js": ["lib/jquery-3.5.1.min.js"]
         }
-    ]
+    ],
+    "background": {
+        "scripts": ["background/background.js"],
+        "persistent": false
+      },
+    "permissions": ["alarms"]
 }
