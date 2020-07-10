@@ -60,12 +60,12 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
                 
                 // Time calculations for days, hours, minutes and seconds
                 var days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)) + (days * 24);
                 var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
                 var seconds = Math.floor((distance % (1000 * 60)) / 1000);
                 
                 // Output the result in an element with id="timeRemaining"
-                document.getElementById("timeRemaining").innerHTML = days + "d " + hours + "h "
+                document.getElementById("timeRemaining").innerHTML = "Tab closing in " + hours + "h "
                 + minutes + "m " + seconds + "s ";
                 
                 // If the count down is over, write some text 
