@@ -19,7 +19,7 @@ $( document ).ready(function() {
         });
 
         // Close the popup
-        window.close();
+    window.close();
     });
 
     // If the user cancels the timer, clear the alarm and the badge
@@ -83,7 +83,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
                 var seconds = Math.floor((distance % (1000 * 60)) / 1000);
                 
                 // Output the result in an element with id="timeRemaining"
-                document.getElementById("timeRemaining").innerHTML = "Tab closing in " + hours + "h "
+                document.getElementById("timeRemaining").innerHTML = hours + "h "
                 + minutes + "m " + seconds + "s ";
                 
                 // If the count down is over, write some text 
