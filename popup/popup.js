@@ -2,12 +2,24 @@ $( document ).ready(function() {
     // Hide the cancel timer div until we need it
     $("#cancelDiv").hide();
 
+    // retrieve the last alarm values that were used as default
+    chrome.storage.local.get(["hours"], function(data){
+        $("#hours")[0].value = data.hours;
+    });
+    chrome.storage.local.get(["minutes"], function(data){
+        $("#minutes")[0].value = data.minutes;
+    });
+
     // Create tab countdown timer when the user sets one
     $("#startbutton").bind('click', function(e){
         chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
             // name of the alarm is just the id of the active tab
             chrome.alarms.create(tabs[0].id.toString(), {delayInMinutes: getCloseTimeInSeconds()/60} );
             
+            // store these alarm values as defaults
+            chrome.storage.local.set({ "hours": $("#hours")[0].value }, function(){});
+            chrome.storage.local.set({ "minutes": $("#minutes")[0].value }, function(){});
+
             function getCloseTimeInSeconds() {
                 var seconds = 0;
                 

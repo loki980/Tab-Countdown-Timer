@@ -15,7 +15,10 @@
     "background": {
         "service_worker": "background/background.js"
       },
-    "permissions": ["alarms"],
+    "permissions": [
+        "alarms",
+        "storage"
+    ],
     "content_security_policy": {
         "extension_pages": "script-src 'self'; object-src 'self'"
     }
