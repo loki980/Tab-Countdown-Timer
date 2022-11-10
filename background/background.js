@@ -23,7 +23,7 @@ function FormatDuration(d) {
     return Math.floor(d / divisor[0]) + ":" + pad(Math.floor((d % divisor[0]) / divisor[1]));
 }
 
-chrome.browserAction.setBadgeBackgroundColor({ 'color': "#777" });
+chrome.action.setBadgeBackgroundColor({ 'color': "#777" });
 
 // Set the extension badge to the time remaining every second.
 function UpdateBadges() {
@@ -32,7 +32,7 @@ function UpdateBadges() {
     chrome.alarms.getAll(function(alarms) { 
         for(alarm of alarms) {
             var description = FormatDuration(alarm.scheduledTime - now);
-            chrome.browserAction.setBadgeText({ 'tabId': parseInt(alarm.name), 'text': description});
+            chrome.action.setBadgeText({ 'tabId': parseInt(alarm.name), 'text': description});
         }        
     });
 }

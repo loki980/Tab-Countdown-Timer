@@ -19,13 +19,13 @@ $( document ).ready(function() {
         });
 
         // Close the popup
-    window.close();
+        window.close();
     });
 
     // If the user cancels the timer, clear the alarm and the badge
     $("#cancelbutton").bind('click', function(e){
         chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-            chrome.browserAction.setBadgeText({ 'tabId': parseInt(tabs[0].id), 'text': ""});
+            chrome.action.setBadgeText({ 'tabId': parseInt(tabs[0].id), 'text': ""});
             chrome.alarms.clear(tabs[0].id.toString())
             $("#cancelDiv").hide();
         });
