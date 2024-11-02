@@ -1,6 +1,6 @@
 {
     "name": "Tab Countdown Timer",
-    "version": "1.2",
+    "version": "1.2.0",
     "manifest_version": 3,
     "description": "A Chromium Extension that allows you to set a timer that counts down and then closes the tab.",
     "icons": {
