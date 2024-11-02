@@ -1,58 +1,30 @@
+<!DOCTYPE html>
 <html>
     <head>
         <meta charset="utf-8" />
-        <style>
-            body {
-                width: 200px;
-            }
-            #startbutton {
-                background-color: #336dab;
-                border: none;
-                color: white;
-                padding: 15px 32px;
-                text-align: center;
-                font-size: 16px;
-            }
-            #cancelbutton {
-                background-color: #ff0040;
-                border: none;
-                color: white;
-                text-align: center;
-                font-size: 16px;
-            }
-
-            /* dark mode changes */
-            @media (prefers-color-scheme: dark) {
-            body {
-                background-color: #4a4a4a;
-                color: #D2D2D2;
-            }
-            input[type="text"], textarea {
-                background-color : #4D5258;
-                color: #D2D2D2;
-            }
-            }
-            </style>
+        <link rel="stylesheet" href="styles.css">
     </head>
-
     <body>
-        <h2>Tab countdown timer</h2>
+        <h2>Tab Countdown Timer</h2>
 
-        <label for="hours">Hours:</label>
-        <input type="text" id="hours" name="hours" value="0"><br><br>
+        <div class="input-group">
+            <label for="hours">Hours:</label>
+            <input type="text" id="hours" name="hours" value="0">
+        </div>
 
-        <label for="minutes">Minutes:</label>
-        <input type="text" id="minutes" name="minutes" value="0"><br><br>
+        <div class="input-group">
+            <label for="minutes">Minutes:</label>
+            <input type="text" id="minutes" name="minutes" value="0">
+        </div>
 
-        <button id="startbutton">Start countdown</button>
+        <button id="startbutton" class="button">Start countdown</button>
+        
         <div id="cancelDiv">
-            <table>
-                <tr><td><button id="cancelbutton">Cancel</button></td><td><p id="timeRemaining"></p></td></tr>
-            </table>
+            <button id="cancelbutton" class="button">Cancel</button>
+            <p id="timeRemaining"></p>
         </div>
 
         <script src="/lib/jquery-3.5.1.min.js"></script>
         <script src="popup.js"></script>
-
     </body>
 </html>
