@@ -80,8 +80,8 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
             $("#cancelDiv").show();
             var countDownDate = new Date(alarms.scheduledTime).getTime();
             
-            // Update the count down every 1 second
-            var x = setInterval(function() {
+            // Function to update the countdown
+            function updateCountdown() {
                 // Get today's date and time
                 var now = new Date().getTime();
                 
@@ -103,7 +103,13 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
                     clearInterval(x);
                     document.getElementById("timeRemaining").innerHTML = "EXPIRED";
                 }
-            }, 1000);
+            }
+
+            // Update immediately on popup open
+            updateCountdown();
+            
+            // Then update every 1 second
+            var x = setInterval(updateCountdown, 1000);
         }
     });
 });
