@@ -4,10 +4,10 @@ $( document ).ready(function() {
 
     // retrieve the last alarm values that were used as default
     chrome.storage.local.get(["hours"], function(data){
-        $("#hours")[0].value = data.hours;
+        $("#hours")[0].value = data.hours !== undefined ? data.hours : 0;
     });
     chrome.storage.local.get(["minutes"], function(data){
-        $("#minutes")[0].value = data.minutes;
+        $("#minutes")[0].value = data.minutes !== undefined ? data.minutes : 30;
     });
 
     // Create tab countdown timer when the user sets one
