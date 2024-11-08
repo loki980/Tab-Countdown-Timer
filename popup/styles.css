@@ -6,6 +6,8 @@
     --input-bg: #f5f5f5;
     --input-border: #e0e0e0;
     --shadow-color: rgba(0, 0, 0, 0.1);
+    --preset-btn-bg: #f0f0f0;
+    --preset-btn-hover: #e0e0e0;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -17,6 +19,8 @@
         --input-bg: #3d3d3d;
         --input-border: #4d4d4d;
         --shadow-color: rgba(0, 0, 0, 0.3);
+        --preset-btn-bg: #3d3d3d;
+        --preset-btn-hover: #4d4d4d;
     }
 }
 
@@ -53,7 +57,7 @@ label {
     font-size: 0.9rem;
 }
 
-input[type="text"] {
+input[type="number"] {
     width: 100%;
     padding: 10px;
     border: 2px solid var(--input-border);
@@ -62,11 +66,40 @@ input[type="text"] {
     color: var(--text-color);
     font-size: 1rem;
     outline: none;
+    appearance: textfield;
+    -moz-appearance: textfield;
 }
 
-input[type="text"]:focus {
+input[type="number"]::-webkit-inner-spin-button, 
+input[type="number"]::-webkit-outer-spin-button { 
+    -webkit-appearance: none; 
+    margin: 0; 
+}
+
+input[type="number"]:focus {
     border-color: var(--primary-color);
     box-shadow: 0 0 0 2px var(--primary-color, 0.2);
+}
+
+.preset-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 15px;
+}
+
+.preset-btn {
+    background-color: var(--preset-btn-bg);
+    color: var(--text-color);
+    border: none;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.preset-btn:hover {
+    background-color: var(--preset-btn-hover);
 }
 
 .button {

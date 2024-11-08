@@ -9,12 +9,19 @@
 
         <div class="input-group">
             <label for="hours">Hours:</label>
-            <input type="text" id="hours" name="hours" value="0">
+            <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
         </div>
 
         <div class="input-group">
             <label for="minutes">Minutes:</label>
-            <input type="text" id="minutes" name="minutes" value="0">
+            <input type="number" id="minutes" name="minutes" value="30" min="0" max="59" step="1">
+        </div>
+
+        <div class="preset-buttons">
+            <button class="preset-btn" data-minutes="5">5m</button>
+            <button class="preset-btn" data-minutes="15">15m</button>
+            <button class="preset-btn" data-minutes="30">30m</button>
+            <button class="preset-btn" data-hours="1">1h</button>
         </div>
 
         <button id="startbutton" class="button">Start countdown</button>
