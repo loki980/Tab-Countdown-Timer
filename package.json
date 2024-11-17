@@ -1,0 +1,27 @@
+{
+  "name": "tab-countdown-timer",
+  "version": "1.0.0",
+  "description": "A browser extension for Chrome and Edge that allows you to set a countdown timer for any tab. When the timer reaches zero, the tab automatically closes. Perfect for time management, limiting time spent on specific websites, or setting reminders.",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/loki980/Tab-Countdown-Timer.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/loki980/Tab-Countdown-Timer/issues"
+  },
+  "homepage": "https://github.com/loki980/Tab-Countdown-Timer#readme",
+  "devDependencies": {
+    "jest": "^27.5.1",
+    "jest-chrome": "^0.8.0"
+  }
+}
