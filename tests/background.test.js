@@ -1,5 +1,5 @@
 // Import the utility functions and ChromeAPIWrapper for testing
-const { FormatDuration, ChromeAPIWrapper } = require('../background/background.js');
+const { FormatDuration, ChromeAPIWrapper, HandleRemove } = require('../background/background.js');
 
 /**
  * Test suite for background script utility functions
@@ -25,6 +25,16 @@ describe('Background Script Utility Functions', () => {
     // Test that negative durations return a question mark
     test('returns "?" for negative duration', () => {
       expect(FormatDuration(-1000)).toBe('?');
+    });
+
+    // Test that zero duration returns "0:00"
+    test('returns "0:00" for zero duration', () => {
+      expect(FormatDuration(0)).toBe('0:00');
+    });
+
+    // Test that very large durations are formatted correctly
+    test('formats very large durations correctly', () => {
+      expect(FormatDuration(72000000)).toBe('20:00'); // 20 hours
     });
   });
 
@@ -85,17 +95,14 @@ describe('Background Script Utility Functions', () => {
 
     // Test error handling in setBadgeText
     test('setBadgeText handles errors correctly', async () => {
-      // Mock an error condition
       chrome.action.setBadgeText = jest.fn((options, callback) => {
         chrome.runtime.lastError = { message: 'Error occurred' };
         callback();
       });
 
-      try {
-        await ChromeAPIWrapper.action.setBadgeText({ tabId: 123, text: '1:00' });
-      } catch (error) {
-        expect(error.message).toBe('Error occurred');
-      }
+      await expect(
+        ChromeAPIWrapper.action.setBadgeText({ tabId: 123, text: '1:00' })
+      ).rejects.toMatchObject({ message: 'Error occurred' });
     });
 
     // Test that getAll returns empty array when no alarms exist
@@ -107,6 +114,56 @@ describe('Background Script Utility Functions', () => {
     // Test that remove resolves properly after removing a tab
     test('remove resolves correctly when a tab is removed', async () => {
       await expect(ChromeAPIWrapper.tabs.remove(123)).resolves.toBeUndefined();
+    });
+  });
+
+  /**
+   * Tests for HandleRemove function
+   */
+  describe('HandleRemove', () => {
+    test('clears alarm when a tab is removed', () => {
+      const tabId = 123;
+      HandleRemove(tabId);
+      expect(chrome.alarms.clear).toHaveBeenCalledWith(tabId.toString(), expect.any(Function));
+    });
+
+    test('handles errors when clearing alarm', async () => {
+      const tabId = 123;
+      chrome.alarms.clear = jest.fn((name, callback) => {
+        chrome.runtime.lastError = { message: 'Failed to clear alarm' };
+        callback(false);
+      });
+
+      HandleRemove(tabId);
+      expect(chrome.alarms.clear).toHaveBeenCalledWith(tabId.toString(), expect.any(Function));
+    });
+  });
+
+  /**
+   * Tests for badge text updates
+   */
+  describe('Badge Text Updates', () => {
+    test('updates badge text for valid tab', async () => {
+      const alarm = { name: '123', scheduledTime: Date.now() + 60000 }; // 1 minute from now
+      chrome.alarms.getAll = jest.fn((callback) => callback([alarm]));
+      chrome.tabs.get = jest.fn((tabId, callback) => callback({ id: 123 }));
+
+      await ChromeAPIWrapper.action.setBadgeText({ tabId: 123, text: '1:00' });
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 123, text: '1:00' },
+        expect.any(Function)
+      );
+    });
+
+    test('handles non-existent tabs', async () => {
+      chrome.tabs.get = jest.fn((tabId, callback) => {
+        chrome.runtime.lastError = { message: 'Tab not found' };
+        callback();
+      });
+
+      await expect(
+        ChromeAPIWrapper.tabs.get(123)
+      ).rejects.toMatchObject({ message: 'Tab not found' });
     });
   });
 });

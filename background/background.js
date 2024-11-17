@@ -167,6 +167,8 @@ setInterval(UpdateBadges, 1000);
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         FormatDuration,
-        ChromeAPIWrapper
+        ChromeAPIWrapper,
+        HandleRemove,
+        UpdateBadges
     };
 }
