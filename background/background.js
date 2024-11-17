@@ -152,7 +152,6 @@ async function UpdateBadges() {
                     'text': description
                 });
             } catch (error) {
-                // Tab doesn't exist anymore, clean up the alarm
                 if (error.message === 'Tab not found') {
                     try {
                         await ChromeAPIWrapper.alarms.clear(alarm.name);

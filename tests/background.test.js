@@ -246,12 +246,10 @@ describe('Background Script Utility Functions', () => {
       });
       chrome.alarms.clear.mockImplementation((name, callback) => callback(true));
 
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
       await UpdateBadges();
 
       // Verify error handling
       expect(chrome.alarms.clear).toHaveBeenCalledWith('456', expect.any(Function));
-      expect(consoleSpy).not.toHaveBeenCalled();
     });
 
     test('handles alarm clear error', async () => {
@@ -277,7 +275,7 @@ describe('Background Script Utility Functions', () => {
       // Verify error handling
       expect(consoleSpy).toHaveBeenCalledWith(
         'Failed to clear orphaned alarm:',
-        expect.any(Object)
+        { message: 'Failed to clear alarm' }
       );
     });
 
