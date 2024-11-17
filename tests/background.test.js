@@ -1,5 +1,5 @@
 // Import the utility functions and ChromeAPIWrapper for testing
-const { FormatDuration, ChromeAPIWrapper, HandleRemove } = require('../background/background.js');
+const { FormatDuration, ChromeAPIWrapper, HandleRemove, UpdateBadges } = require('../background/background.js');
 
 /**
  * Test suite for background script utility functions
@@ -178,6 +178,124 @@ describe('Background Script Utility Functions', () => {
       await expect(
         ChromeAPIWrapper.tabs.get(123)
       ).rejects.toMatchObject({ message: 'Tab not found' });
+    });
+  });
+
+  /**
+   * Tests for UpdateBadges function
+   */
+  describe('UpdateBadges', () => {
+    beforeEach(() => {
+      // Reset runtime.lastError before each test
+      chrome.runtime.lastError = null;
+      jest.clearAllMocks();
+      jest.useFakeTimers();
+      
+      // Mock setInterval
+      global.setInterval = jest.fn();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+      jest.restoreAllMocks();
+    });
+
+    test('handles successful badge updates', async () => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+
+      const mockAlarms = [{
+        name: '123',
+        scheduledTime: now.getTime() + 3600000 // 1 hour from now
+      }];
+
+      // Setup successful path mocks
+      chrome.alarms.getAll.mockImplementation(callback => callback(mockAlarms));
+      chrome.tabs.get.mockImplementation((tabId, callback) => callback({ id: 123 }));
+      chrome.action.setBadgeText.mockImplementation((options, callback) => callback());
+
+      // Call UpdateBadges and wait for it to complete
+      await UpdateBadges();
+
+      // Verify the entire flow
+      expect(chrome.alarms.getAll).toHaveBeenCalledWith(expect.any(Function));
+      expect(chrome.tabs.get).toHaveBeenCalledWith(123, expect.any(Function));
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        {
+          tabId: 123,
+          text: '1:00'
+        },
+        expect.any(Function)
+      );
+    });
+
+    test('handles tab not found error', async () => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      
+      const mockAlarms = [{
+        name: '456',
+        scheduledTime: now.getTime() + 1000
+      }];
+
+      // Setup error path mocks
+      chrome.alarms.getAll.mockImplementation(callback => callback(mockAlarms));
+      chrome.tabs.get.mockImplementation((tabId, callback) => {
+        chrome.runtime.lastError = { message: 'Tab not found' };
+        callback();
+      });
+      chrome.alarms.clear.mockImplementation((name, callback) => callback(true));
+
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+      await UpdateBadges();
+
+      // Verify error handling
+      expect(chrome.alarms.clear).toHaveBeenCalledWith('456', expect.any(Function));
+      expect(consoleSpy).not.toHaveBeenCalled();
+    });
+
+    test('handles alarm clear error', async () => {
+      const mockAlarms = [{
+        name: '789',
+        scheduledTime: Date.now() + 1000
+      }];
+
+      // Setup error path mocks
+      chrome.alarms.getAll.mockImplementation(callback => callback(mockAlarms));
+      chrome.tabs.get.mockImplementation((tabId, callback) => {
+        chrome.runtime.lastError = { message: 'Tab not found' };
+        callback();
+      });
+      chrome.alarms.clear.mockImplementation((name, callback) => {
+        chrome.runtime.lastError = { message: 'Failed to clear alarm' };
+        callback(false);
+      });
+
+      const consoleSpy = jest.spyOn(console, 'error');
+      await UpdateBadges();
+
+      // Verify error handling
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to clear orphaned alarm:',
+        expect.any(Object)
+      );
+    });
+
+    test('handles getAll alarms error', async () => {
+      // Setup error path mock
+      chrome.alarms.getAll.mockImplementation(callback => {
+        chrome.runtime.lastError = { message: 'Failed to get alarms' };
+        callback();
+      });
+
+      const consoleSpy = jest.spyOn(console, 'error');
+      await UpdateBadges();
+
+      // Verify error handling
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to get alarms:',
+        expect.any(Object)
+      );
     });
   });
 });

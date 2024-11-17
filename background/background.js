@@ -137,32 +137,34 @@ ChromeAPIWrapper.tabs.onRemoved.addListener(HandleRemove);
 ChromeAPIWrapper.action.setBadgeBackgroundColor({ 'color': "#777" });
 
 // Set the extension badge to the time remaining every second.
-function UpdateBadges() {
-    var now = new Date();
+async function UpdateBadges() {
+    const now = new Date();
 
-    ChromeAPIWrapper.alarms.getAll().then(alarms => {
-        alarms.forEach(alarm => {
-            // Verify the tab still exists before updating badge
-            ChromeAPIWrapper.tabs.get(parseInt(alarm.name))
-                .then(() => {
-                    var description = FormatDuration(alarm.scheduledTime - now);
-                    ChromeAPIWrapper.action.setBadgeText({ 
-                        'tabId': parseInt(alarm.name), 
-                        'text': description
-                    }).catch(error => {
-                        console.error('Failed to update badge:', error);
-                    });
-                })
-                .catch(() => {
-                    // Tab doesn't exist anymore, clean up the alarm
-                    ChromeAPIWrapper.alarms.clear(alarm.name).catch(error => {
-                        console.error('Failed to clear orphaned alarm:', error);
-                    });
+    try {
+        const alarms = await ChromeAPIWrapper.alarms.getAll();
+        
+        for (const alarm of alarms) {
+            try {
+                await ChromeAPIWrapper.tabs.get(parseInt(alarm.name));
+                const description = FormatDuration(alarm.scheduledTime - now);
+                await ChromeAPIWrapper.action.setBadgeText({ 
+                    'tabId': parseInt(alarm.name), 
+                    'text': description
                 });
-        });
-    }).catch(error => {
+            } catch (error) {
+                // Tab doesn't exist anymore, clean up the alarm
+                if (error.message === 'Tab not found') {
+                    try {
+                        await ChromeAPIWrapper.alarms.clear(alarm.name);
+                    } catch (clearError) {
+                        console.error('Failed to clear orphaned alarm:', clearError);
+                    }
+                }
+            }
+        }
+    } catch (error) {
         console.error('Failed to get alarms:', error);
-    });
+    }
 }
 setInterval(UpdateBadges, 1000);
 
@@ -172,6 +174,6 @@ if (typeof module !== 'undefined' && module.exports) {
         FormatDuration,
         ChromeAPIWrapper,
         HandleRemove,
-        UpdateBadges
+        UpdateBadges: UpdateBadges
     };
 }
