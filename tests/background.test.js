@@ -145,14 +145,28 @@ describe('Background Script Utility Functions', () => {
   describe('Badge Text Updates', () => {
     test('updates badge text for valid tab', async () => {
       const alarm = { name: '123', scheduledTime: Date.now() + 60000 }; // 1 minute from now
+      
+      // Setup mocks with proper callback handling
       chrome.alarms.getAll = jest.fn((callback) => callback([alarm]));
       chrome.tabs.get = jest.fn((tabId, callback) => callback({ id: 123 }));
+      chrome.alarms.clear = jest.fn((name, callback) => {
+        chrome.runtime.lastError = null;
+        callback(true);
+      });
+      chrome.action.setBadgeText = jest.fn((options, callback) => {
+        chrome.runtime.lastError = null;
+        callback();
+      });
 
+      // Test the badge text update
       await ChromeAPIWrapper.action.setBadgeText({ tabId: 123, text: '1:00' });
+      
+      // Verify all the expected calls
       expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
         { tabId: 123, text: '1:00' },
         expect.any(Function)
       );
+      expect(chrome.runtime.lastError).toBeNull();
     });
 
     test('handles non-existent tabs', async () => {

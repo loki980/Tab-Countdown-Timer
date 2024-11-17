@@ -125,9 +125,12 @@ ChromeAPIWrapper.alarms.onAlarm.addListener(function(alarm) {
 
 // When the user closes a tab, clear the associated alarm
 function HandleRemove(tabId, removeInfo) {
-    ChromeAPIWrapper.alarms.clear(tabId.toString()).catch(error => {
-        console.error('Failed to clear alarm:', error);
-    });
+    ChromeAPIWrapper.alarms.clear(tabId.toString())
+        .catch(error => {
+            if (error.message !== 'Tab not found') {
+                console.error('Failed to clear alarm:', error);
+            }
+        });
 }
 ChromeAPIWrapper.tabs.onRemoved.addListener(HandleRemove);
 

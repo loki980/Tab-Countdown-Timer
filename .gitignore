@@ -45,3 +45,4 @@ jest-*
 
 # Release-related files
 *.zip
+.aider*
