@@ -1,19 +1,108 @@
-// When an alarm expires, close the tab
-chrome.alarms.onAlarm.addListener(function(alarm) {
-    chrome.tabs.remove(Number(alarm.name)).catch(error => {
-        console.error('Failed to remove tab:', error);
-    });
-});
+// Utility for Chrome API interactions
+const ChromeAPIWrapper = {
+    alarms: {
+        onAlarm: {
+            addListener: (callback) => {
+                if (typeof chrome !== 'undefined' && chrome.alarms) {
+                    chrome.alarms.onAlarm.addListener(callback);
+                }
+            }
+        },
+        clear: (name) => {
+            return new Promise((resolve, reject) => {
+                if (typeof chrome !== 'undefined' && chrome.alarms) {
+                    chrome.alarms.clear(name, (wasCleared) => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else {
+                            resolve(wasCleared);
+                        }
+                    });
+                } else {
+                    resolve(false);
+                }
+            });
+        },
+        getAll: () => {
+            return new Promise((resolve, reject) => {
+                if (typeof chrome !== 'undefined' && chrome.alarms) {
+                    chrome.alarms.getAll((alarms) => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else {
+                            resolve(alarms);
+                        }
+                    });
+                } else {
+                    resolve([]);
+                }
+            });
+        }
+    },
+    tabs: {
+        onRemoved: {
+            addListener: (callback) => {
+                if (typeof chrome !== 'undefined' && chrome.tabs) {
+                    chrome.tabs.onRemoved.addListener(callback);
+                }
+            }
+        },
+        remove: (tabId) => {
+            return new Promise((resolve, reject) => {
+                if (typeof chrome !== 'undefined' && chrome.tabs) {
+                    chrome.tabs.remove(tabId, () => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else {
+                            resolve();
+                        }
+                    });
+                } else {
+                    resolve();
+                }
+            });
+        },
+        get: (tabId) => {
+            return new Promise((resolve, reject) => {
+                if (typeof chrome !== 'undefined' && chrome.tabs) {
+                    chrome.tabs.get(tabId, (tab) => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else {
+                            resolve(tab);
+                        }
+                    });
+                } else {
+                    reject(new Error('Tabs API not available'));
+                }
+            });
+        }
+    },
+    action: {
+        setBadgeBackgroundColor: (color) => {
+            if (typeof chrome !== 'undefined' && chrome.action) {
+                chrome.action.setBadgeBackgroundColor(color);
+            }
+        },
+        setBadgeText: (options) => {
+            return new Promise((resolve, reject) => {
+                if (typeof chrome !== 'undefined' && chrome.action) {
+                    chrome.action.setBadgeText(options, () => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else {
+                            resolve();
+                        }
+                    });
+                } else {
+                    resolve();
+                }
+            });
+        }
+    }
+};
 
-// When the user closes a tab, clear the associated alarm
-function HandleRemove(tabId, removeInfo) {
-    chrome.alarms.clear(tabId.toString()).catch(error => {
-        console.error('Failed to clear alarm:', error);
-    });
-}
-chrome.tabs.onRemoved.addListener(HandleRemove);
-
-// Pretty formatting for a date diff (duration)
+// Utility functions
 function FormatDuration(d) {
     if (d < 0) {
         return "?";
@@ -27,34 +116,63 @@ function FormatDuration(d) {
     return Math.floor(d / divisor[0]) + ":" + pad(Math.floor((d % divisor[0]) / divisor[1]));
 }
 
-chrome.action.setBadgeBackgroundColor({ 'color': "#777" });
+// When an alarm expires, close the tab
+ChromeAPIWrapper.alarms.onAlarm.addListener(function(alarm) {
+    ChromeAPIWrapper.tabs.remove(Number(alarm.name)).catch(error => {
+        console.error('Failed to remove tab:', error);
+    });
+});
+
+// When the user closes a tab, clear the associated alarm
+function HandleRemove(tabId, removeInfo) {
+    ChromeAPIWrapper.alarms.clear(tabId.toString())
+        .catch(error => {
+            if (error.message !== 'Tab not found') {
+                console.error('Failed to clear alarm:', error);
+            }
+        });
+}
+ChromeAPIWrapper.tabs.onRemoved.addListener(HandleRemove);
+
+ChromeAPIWrapper.action.setBadgeBackgroundColor({ 'color': "#777" });
 
 // Set the extension badge to the time remaining every second.
-function UpdateBadges() {
-    var now = new Date();
+async function UpdateBadges() {
+    const now = new Date();
 
-    chrome.alarms.getAll().then(alarms => {
-        alarms.forEach(alarm => {
-            // Verify the tab still exists before updating badge
-            chrome.tabs.get(parseInt(alarm.name))
-                .then(() => {
-                    var description = FormatDuration(alarm.scheduledTime - now);
-                    chrome.action.setBadgeText({ 
-                        'tabId': parseInt(alarm.name), 
-                        'text': description
-                    }).catch(error => {
-                        console.error('Failed to update badge:', error);
-                    });
-                })
-                .catch(() => {
-                    // Tab doesn't exist anymore, clean up the alarm
-                    chrome.alarms.clear(alarm.name).catch(error => {
-                        console.error('Failed to clear orphaned alarm:', error);
-                    });
+    try {
+        const alarms = await ChromeAPIWrapper.alarms.getAll();
+        
+        for (const alarm of alarms) {
+            try {
+                await ChromeAPIWrapper.tabs.get(parseInt(alarm.name));
+                const description = FormatDuration(alarm.scheduledTime - now);
+                await ChromeAPIWrapper.action.setBadgeText({ 
+                    'tabId': parseInt(alarm.name), 
+                    'text': description
                 });
-        });
-    }).catch(error => {
+            } catch (error) {
+                if (error.message === 'Tab not found') {
+                    try {
+                        await ChromeAPIWrapper.alarms.clear(alarm.name);
+                    } catch (clearError) {
+                        console.error('Failed to clear orphaned alarm:', clearError);
+                    }
+                }
+            }
+        }
+    } catch (error) {
         console.error('Failed to get alarms:', error);
-    });
+    }
 }
 setInterval(UpdateBadges, 1000);
+
+// Export for testing
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        FormatDuration,
+        ChromeAPIWrapper,
+        HandleRemove,
+        UpdateBadges: UpdateBadges
+    };
+}

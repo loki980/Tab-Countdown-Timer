@@ -73,6 +73,41 @@ A browser extension for Chrome and Edge that allows you to set a countdown timer
 - Open the "Sources" tab in the developer tools
 - Click "Reload" on the `brave://extensions` page after making modifications to see your changes
 
+## Testing
+
+### Testing Framework
+This project uses Jest for testing Chrome extension functionality.
+
+### Prerequisites
+- Node.js
+- npm
+
+### Setup
+1. Install dependencies:
+```bash
+npm install
+```
+
+### Running Tests
+To run the test suite:
+```bash
+npm test
+```
+
+### Test Coverage
+Current tests cover:
+- Utility function testing (duration formatting)
+- Chrome extension API mocking
+- Basic extension functionality verification
+
+### Adding New Tests
+- Place test files in the `__tests__` directory
+- Use `.test.js` or `.spec.js` file extensions
+- Follow existing test structure and mocking patterns
+
+### Mocking Chrome Extension APIs
+Tests use `jest-chrome` to mock Chrome extension APIs, allowing for comprehensive testing of extension functionality without a full browser environment.
+
 ## License
 
 This project is open source and available under the MIT License.
