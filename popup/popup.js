@@ -115,15 +115,34 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         if(alarms != null) {
             $("#cancelDiv").show();
             var countDownDate = new Date(alarms.scheduledTime).getTime();
+            var isPaused = false;
+            var pausedTimeRemaining = null;
             
             // Function to update the countdown
             function updateCountdown() {
+                if (isPaused) {
+                    if (pausedTimeRemaining) {
+                        displayTime(pausedTimeRemaining);
+                    }
+                    return;
+                }
+
                 // Get today's date and time
                 var now = new Date().getTime();
                 
                 // Find the distance between now and the count down date
                 var distance = countDownDate - now;
                 
+                displayTime(distance);
+                
+                // If the count down is over, write some text 
+                if (distance < 0) {
+                    clearInterval(x);
+                    document.getElementById("timeRemaining").innerHTML = "EXPIRED";
+                }
+            }
+
+            function displayTime(distance) {
                 // Time calculations for days, hours, minutes and seconds
                 var days = Math.floor(distance / (1000 * 60 * 60 * 24));
                 var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)) + (days * 24);
@@ -133,13 +152,33 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
                 // Output the result in an element with id="timeRemaining"
                 document.getElementById("timeRemaining").innerHTML = hours + "h "
                 + minutes + "m " + seconds + "s ";
-                
-                // If the count down is over, write some text 
-                if (distance < 0) {
-                    clearInterval(x);
-                    document.getElementById("timeRemaining").innerHTML = "EXPIRED";
-                }
             }
+
+            // Handle pause button click
+            $("#pausebutton").on('click', function() {
+                isPaused = !isPaused;
+                $(this).toggleClass('paused');
+                $(this).text(isPaused ? 'Resume' : 'Pause');
+
+                if (isPaused) {
+                    // Store the current time remaining when pausing
+                    pausedTimeRemaining = countDownDate - new Date().getTime();
+                } else {
+                    // Adjust the countdown date when resuming
+                    countDownDate = new Date().getTime() + pausedTimeRemaining;
+                }
+
+                // Update the alarm
+                chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+                    if (isPaused) {
+                        chrome.alarms.clear(tabs[0].id.toString());
+                    } else {
+                        chrome.alarms.create(tabs[0].id.toString(), {
+                            when: countDownDate
+                        });
+                    }
+                });
+            });
 
             // Update immediately on popup open
             updateCountdown();
