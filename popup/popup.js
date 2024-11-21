@@ -6,9 +6,26 @@ $( document ).ready(function() {
     // Check if current tab is YouTube and show/enable options accordingly
     chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
         const currentTab = tabs[0];
+        const tabId = currentTab.id.toString();
+
         if (currentTab.url && currentTab.url.includes("youtube.com/watch")) {
             $(".action-options").show();
             $("#pauseVideo").prop('disabled', false);
+
+            // Load saved action preference for this tab
+            chrome.storage.local.get([tabId + "_action"], function(data) {
+                const savedAction = data[tabId + "_action"];
+                if (savedAction) {
+                    $(`input[name="timerAction"][value="${savedAction}"]`).prop('checked', true);
+                }
+            });
+
+            // Save action preference when changed
+            $('input[name="timerAction"]').on('change', function() {
+                chrome.storage.local.set({ 
+                    [tabId + "_action"]: this.value
+                });
+            });
         }
     });
 
@@ -32,8 +49,9 @@ $( document ).ready(function() {
     });
 
     // Create tab countdown timer when the user sets one
-    $("#startbutton").bind('click', function(e){
-        chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
+    $("#startbutton").on('click', async function(e) {
+        try {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const tabId = tabs[0].id.toString();
             let action = "close";  // Default action
 
@@ -43,29 +61,42 @@ $( document ).ready(function() {
             }
             
             // Store the selected action with the alarm
-            chrome.storage.local.set({ 
+            await chrome.storage.local.set({ 
                 [tabId + "_action"]: action,
                 "hours": $("#hours")[0].value,
                 "minutes": $("#minutes")[0].value 
             });
 
+            // Set initial badge color
+            await chrome.action.setBadgeBackgroundColor({ 
+                'tabId': parseInt(tabId), 
+                'color': '#666666'
+            });
+
             // Create the alarm
-            chrome.alarms.create(tabId, {
+            await chrome.alarms.create(tabId, {
                 delayInMinutes: getCloseTimeInSeconds()/60
             });
-        });
 
-        // Close the popup
-        window.close();
+            // Close the popup
+            window.close();
+        } catch (error) {
+            console.error('Error starting timer:', error);
+        }
     });
 
     // If the user cancels the timer, clear the alarm and the badge
-    $("#cancelbutton").bind('click', function(e){
-        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-            chrome.action.setBadgeText({ 'tabId': parseInt(tabs[0].id), 'text': ""});
-            chrome.alarms.clear(tabs[0].id.toString())
+    $("#cancelbutton").on('click', async function(e) {
+        try {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabId = parseInt(tabs[0].id);
+            await chrome.action.setBadgeText({ 'tabId': tabId, 'text': ""});
+            await chrome.action.setBadgeBackgroundColor({ 'tabId': tabId, 'color': '#666666'});
+            await chrome.alarms.clear(tabs[0].id.toString());
             $("#cancelDiv").hide();
-        });
+        } catch (error) {
+            console.error('Error canceling timer:', error);
+        }
     });
 
     // Arrow key and mousewheel input adjustment
@@ -164,12 +195,20 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
                 var seconds = Math.floor((distance % (1000 * 60)) / 1000);
                 
                 // Output the result in an element with id="timeRemaining"
-                document.getElementById("timeRemaining").innerHTML = hours + "h "
-                + minutes + "m " + seconds + "s ";
+                const timeElement = document.getElementById("timeRemaining");
+                timeElement.innerHTML = hours + "h " + minutes + "m " + seconds + "s ";
+
+                // Check if time is under 30 seconds
+                const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+                if (totalSeconds <= 30) {
+                    timeElement.classList.add('warning');
+                } else {
+                    timeElement.classList.remove('warning');
+                }
             }
 
             // Handle pause button click
-            $("#pausebutton").on('click', function() {
+            $("#pausebutton").on('click', async function() {
                 isPaused = !isPaused;
                 $(this).toggleClass('paused');
                 $(this).text(isPaused ? 'Resume' : 'Pause');
@@ -182,16 +221,24 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
                     countDownDate = new Date().getTime() + pausedTimeRemaining;
                 }
 
-                // Update the alarm
-                chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+                try {
+                    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                    const tabId = parseInt(tabs[0].id);
                     if (isPaused) {
-                        chrome.alarms.clear(tabs[0].id.toString());
+                        await chrome.alarms.clear(tabs[0].id.toString());
+                        // Reset badge color when paused
+                        await chrome.action.setBadgeBackgroundColor({ 
+                            'tabId': tabId,
+                            'color': '#666666'
+                        });
                     } else {
-                        chrome.alarms.create(tabs[0].id.toString(), {
+                        await chrome.alarms.create(tabs[0].id.toString(), {
                             when: countDownDate
                         });
                     }
-                });
+                } catch (error) {
+                    console.error('Error handling pause:', error);
+                }
             });
 
             // Update immediately on popup open
