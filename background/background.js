@@ -224,7 +224,7 @@ function HandleRemove(tabId, removeInfo) {
 ChromeAPIWrapper.tabs.onRemoved.addListener(HandleRemove);
 
 // Listen for alarm creation to set initial badge color
-chrome.alarms.onAlarm.addListener((alarm) => {
+ChromeAPIWrapper.alarms.onAlarm.addListener((alarm) => {
     const tabId = parseInt(alarm.name);
     ChromeAPIWrapper.action.setBadgeBackgroundColor({ 
         'tabId': tabId,
