@@ -1,156 +1,195 @@
-:root {
-    --primary-color: #336dab;
-    --danger-color: #ff0040;
-    --bg-color: #ffffff;
-    --text-color: #333333;
-    --input-bg: #f5f5f5;
-    --input-border: #e0e0e0;
-    --shadow-color: rgba(0, 0, 0, 0.1);
-    --preset-btn-bg: #f0f0f0;
-    --preset-btn-hover: #e0e0e0;
+body {
+    width: 300px;
+    padding: 10px;
+    font-family: Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
-    :root {
-        --primary-color: #4a80c0;
-        --danger-color: #ff1a4d;
-        --bg-color: #2d2d2d;
-        --text-color: #e0e0e0;
-        --input-bg: #3d3d3d;
-        --input-border: #4d4d4d;
-        --shadow-color: rgba(0, 0, 0, 0.3);
-        --preset-btn-bg: #3d3d3d;
-        --preset-btn-hover: #4d4d4d;
+    body {
+        background-color: #202124;
+        color: #e8eaed;
+    }
+
+    input[type="number"] {
+        background-color: #292a2d;
+        color: #e8eaed;
+        border-color: #5f6368;
+    }
+
+    .preset-btn {
+        background: #292a2d !important;
+        color: #e8eaed !important;
+        border-color: #5f6368 !important;
+    }
+
+    .preset-btn:hover {
+        background: #3c4043 !important;
+    }
+
+    .action-options {
+        background: #292a2d !important;
+        border-color: #5f6368 !important;
+    }
+
+    .radio-group label {
+        color: #e8eaed !important;
+    }
+
+    .radio-group input[type="radio"]:disabled + label {
+        color: #9aa0a6 !important;
     }
 }
 
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-    transition: all 0.3s ease;
-}
-
-body {
-    width: 300px;
-    padding: 20px;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--text-color);
-}
-
 h2 {
-    margin-bottom: 20px;
-    font-size: 1.5rem;
-    font-weight: 600;
     text-align: center;
+    color: #333;
+    margin-top: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+    h2 {
+        color: #e8eaed;
+    }
 }
 
 .input-group {
-    margin-bottom: 15px;
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
-label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: 500;
-    font-size: 0.9rem;
+.input-group label {
+    margin-right: 10px;
 }
 
-input[type="number"] {
-    width: 100%;
-    padding: 10px;
-    border: 2px solid var(--input-border);
-    border-radius: 8px;
-    background-color: var(--input-bg);
-    color: var(--text-color);
-    font-size: 1rem;
-    outline: none;
-    appearance: textfield;
-    -moz-appearance: textfield;
-}
-
-input[type="number"]::-webkit-inner-spin-button, 
-input[type="number"]::-webkit-outer-spin-button { 
-    -webkit-appearance: none; 
-    margin: 0; 
-}
-
-input[type="number"]:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px var(--primary-color, 0.2);
+.input-group input {
+    width: 60px;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
 }
 
 .preset-buttons {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 15px;
+    margin: 15px 0;
 }
 
 .preset-btn {
-    background-color: var(--preset-btn-bg);
-    color: var(--text-color);
-    border: none;
-    border-radius: 6px;
-    padding: 8px 12px;
-    font-size: 0.9rem;
+    padding: 5px 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #f8f8f8;
     cursor: pointer;
-    transition: background-color 0.2s ease;
+    font-size: 1.1em;
+    font-weight: bold;
 }
 
 .preset-btn:hover {
-    background-color: var(--preset-btn-hover);
+    background: #eee;
 }
 
 .button {
+    width: 100%;
+    padding: 12px;
+    margin: 10px 0;
+    background-color: #4CAF50;
+    color: white;
     border: none;
-    border-radius: 8px;
-    font-weight: 600;
+    border-radius: 4px;
     cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    font-size: 1.2em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 }
 
 .button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px var(--shadow-color);
-}
-
-.button:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px var(--shadow-color);
-}
-
-#startbutton {
-    width: 100%;
-    padding: 12px;
-    background-color: var(--primary-color);
-    color: white;
-    font-size: 1rem;
-    margin-bottom: 15px;
-}
-
-#cancelDiv {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    width: 100%;
+    background-color: #45a049;
 }
 
 #cancelbutton {
-    background-color: var(--danger-color);
-    color: white;
-    padding: 8px 12px;
-    font-size: 0.9rem;
-    min-width: 70px;
+    background-color: #f44336;
+}
+
+#cancelbutton:hover {
+    background-color: #da190b;
+}
+
+#pausebutton {
+    background-color: #2196F3;
+}
+
+#pausebutton:hover {
+    background-color: #0b7dda;
+}
+
+#pausebutton.paused {
+    background-color: #4CAF50;
 }
 
 #timeRemaining {
-    font-family: 'Courier New', monospace;
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: var(--text-color);
-    text-align: right;
-    flex-grow: 1;
-    white-space: nowrap;
+    text-align: center;
+    font-size: 2em;
+    font-weight: bold;
+    margin: 15px 0;
+    padding: 10px;
+    border-radius: 8px;
+    background-color: #f5f5f5;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+    #timeRemaining {
+        background-color: #292a2d;
+    }
+}
+
+#timeRemaining.warning {
+    color: #ff0000;
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.action-options {
+    margin: 15px auto;
+    padding: 10px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    background: #f9f9f9;
+    width: 35%;
+}
+
+.radio-group {
+    margin: 8px 0;
+    display: flex;
+    align-items: center;
+}
+
+.radio-group input[type="radio"] {
+    margin-right: 8px;
+}
+
+.radio-group label {
+    color: #333;
+}
+
+.radio-group input[type="radio"]:disabled + label {
+    color: #999;
+    cursor: not-allowed;
 }

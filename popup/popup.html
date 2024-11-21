@@ -24,10 +24,22 @@
             <button class="preset-btn" data-hours="1">1h</button>
         </div>
 
+        <div class="action-options">
+            <div class="radio-group">
+                <input type="radio" id="closeTab" name="timerAction" value="close" checked>
+                <label for="closeTab">Close Tab</label>
+            </div>
+            <div class="radio-group">
+                <input type="radio" id="pauseVideo" name="timerAction" value="pause" disabled>
+                <label for="pauseVideo">Pause Video</label>
+            </div>
+        </div>
+
         <button id="startbutton" class="button">Start countdown</button>
         
         <div id="cancelDiv">
             <button id="cancelbutton" class="button">Cancel</button>
+            <button id="pausebutton" class="button">Pause</button>
             <p id="timeRemaining"></p>
         </div>
 

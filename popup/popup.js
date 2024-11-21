@@ -1,6 +1,33 @@
 $( document ).ready(function() {
-    // Hide the cancel timer div until we need it
+    // Hide the cancel timer div and action options by default
     $("#cancelDiv").hide();
+    $(".action-options").hide();
+
+    // Check if current tab is YouTube and show/enable options accordingly
+    chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
+        const currentTab = tabs[0];
+        const tabId = currentTab.id.toString();
+
+        if (currentTab.url && currentTab.url.includes("youtube.com/watch")) {
+            $(".action-options").show();
+            $("#pauseVideo").prop('disabled', false);
+
+            // Load saved action preference for this tab
+            chrome.storage.local.get([tabId + "_action"], function(data) {
+                const savedAction = data[tabId + "_action"];
+                if (savedAction) {
+                    $(`input[name="timerAction"][value="${savedAction}"]`).prop('checked', true);
+                }
+            });
+
+            // Save action preference when changed
+            $('input[name="timerAction"]').on('change', function() {
+                chrome.storage.local.set({ 
+                    [tabId + "_action"]: this.value
+                });
+            });
+        }
+    });
 
     // retrieve the last alarm values that were used as default
     chrome.storage.local.get(["hours"], function(data){
@@ -22,36 +49,54 @@ $( document ).ready(function() {
     });
 
     // Create tab countdown timer when the user sets one
-    $("#startbutton").bind('click', function(e){
-        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-            // name of the alarm is just the id of the active tab
-            chrome.alarms.create(tabs[0].id.toString(), {delayInMinutes: getCloseTimeInSeconds()/60} );
-            
-            // store these alarm values as defaults
-            chrome.storage.local.set({ "hours": $("#hours")[0].value }, function(){});
-            chrome.storage.local.set({ "minutes": $("#minutes")[0].value }, function(){});
+    $("#startbutton").on('click', async function(e) {
+        try {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabId = tabs[0].id.toString();
+            let action = "close";  // Default action
 
-            function getCloseTimeInSeconds() {
-                var seconds = 0;
-                
-                seconds += Number($("#minutes")[0].value * 60);
-                seconds += Number($("#hours")[0].value * 60 * 60);
-            
-                return seconds;
+            // Only check radio if it's a YouTube tab
+            if (tabs[0].url && tabs[0].url.includes("youtube.com/watch")) {
+                action = $('input[name="timerAction"]:checked').val();
             }
-        });
+            
+            // Store the selected action with the alarm
+            await chrome.storage.local.set({ 
+                [tabId + "_action"]: action,
+                "hours": $("#hours")[0].value,
+                "minutes": $("#minutes")[0].value 
+            });
 
-        // Close the popup
-        window.close();
+            // Set initial badge color
+            await chrome.action.setBadgeBackgroundColor({ 
+                'tabId': parseInt(tabId), 
+                'color': '#666666'
+            });
+
+            // Create the alarm
+            await chrome.alarms.create(tabId, {
+                delayInMinutes: getCloseTimeInSeconds()/60
+            });
+
+            // Close the popup
+            window.close();
+        } catch (error) {
+            console.error('Error starting timer:', error);
+        }
     });
 
     // If the user cancels the timer, clear the alarm and the badge
-    $("#cancelbutton").bind('click', function(e){
-        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-            chrome.action.setBadgeText({ 'tabId': parseInt(tabs[0].id), 'text': ""});
-            chrome.alarms.clear(tabs[0].id.toString())
+    $("#cancelbutton").on('click', async function(e) {
+        try {
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tabId = parseInt(tabs[0].id);
+            await chrome.action.setBadgeText({ 'tabId': tabId, 'text': ""});
+            await chrome.action.setBadgeBackgroundColor({ 'tabId': tabId, 'color': '#666666'});
+            await chrome.alarms.clear(tabs[0].id.toString());
             $("#cancelDiv").hide();
-        });
+        } catch (error) {
+            console.error('Error canceling timer:', error);
+        }
     });
 
     // Arrow key and mousewheel input adjustment
@@ -115,24 +160,25 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         if(alarms != null) {
             $("#cancelDiv").show();
             var countDownDate = new Date(alarms.scheduledTime).getTime();
+            var isPaused = false;
+            var pausedTimeRemaining = null;
             
             // Function to update the countdown
             function updateCountdown() {
+                if (isPaused) {
+                    if (pausedTimeRemaining) {
+                        displayTime(pausedTimeRemaining);
+                    }
+                    return;
+                }
+
                 // Get today's date and time
                 var now = new Date().getTime();
                 
                 // Find the distance between now and the count down date
                 var distance = countDownDate - now;
                 
-                // Time calculations for days, hours, minutes and seconds
-                var days = Math.floor(distance / (1000 * 60 * 60 * 24));
-                var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)) + (days * 24);
-                var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                var seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                
-                // Output the result in an element with id="timeRemaining"
-                document.getElementById("timeRemaining").innerHTML = hours + "h "
-                + minutes + "m " + seconds + "s ";
+                displayTime(distance);
                 
                 // If the count down is over, write some text 
                 if (distance < 0) {
@@ -140,6 +186,60 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
                     document.getElementById("timeRemaining").innerHTML = "EXPIRED";
                 }
             }
+
+            function displayTime(distance) {
+                // Time calculations for days, hours, minutes and seconds
+                var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+                var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)) + (days * 24);
+                var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                
+                // Output the result in an element with id="timeRemaining"
+                const timeElement = document.getElementById("timeRemaining");
+                timeElement.innerHTML = hours + "h " + minutes + "m " + seconds + "s ";
+
+                // Check if time is under 30 seconds
+                const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+                if (totalSeconds <= 30) {
+                    timeElement.classList.add('warning');
+                } else {
+                    timeElement.classList.remove('warning');
+                }
+            }
+
+            // Handle pause button click
+            $("#pausebutton").on('click', async function() {
+                isPaused = !isPaused;
+                $(this).toggleClass('paused');
+                $(this).text(isPaused ? 'Resume' : 'Pause');
+
+                if (isPaused) {
+                    // Store the current time remaining when pausing
+                    pausedTimeRemaining = countDownDate - new Date().getTime();
+                } else {
+                    // Adjust the countdown date when resuming
+                    countDownDate = new Date().getTime() + pausedTimeRemaining;
+                }
+
+                try {
+                    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                    const tabId = parseInt(tabs[0].id);
+                    if (isPaused) {
+                        await chrome.alarms.clear(tabs[0].id.toString());
+                        // Reset badge color when paused
+                        await chrome.action.setBadgeBackgroundColor({ 
+                            'tabId': tabId,
+                            'color': '#666666'
+                        });
+                    } else {
+                        await chrome.alarms.create(tabs[0].id.toString(), {
+                            when: countDownDate
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error handling pause:', error);
+                }
+            });
 
             // Update immediately on popup open
             updateCountdown();
@@ -149,3 +249,12 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         }
     });
 });
+
+function getCloseTimeInSeconds() {
+    var seconds = 0;
+    
+    seconds += Number($("#minutes")[0].value * 60);
+    seconds += Number($("#hours")[0].value * 60 * 60);
+
+    return seconds;
+}
