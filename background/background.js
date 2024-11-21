@@ -99,6 +99,42 @@ const ChromeAPIWrapper = {
                 }
             });
         }
+    },
+    storage: {
+        local: {
+            get: (key) => {
+                return new Promise((resolve, reject) => {
+                    if (typeof chrome !== 'undefined' && chrome.storage) {
+                        chrome.storage.local.get(key, (result) => {
+                            if (chrome.runtime.lastError) {
+                                reject(chrome.runtime.lastError);
+                            } else {
+                                resolve(result);
+                            }
+                        });
+                    } else {
+                        resolve({});
+                    }
+                });
+            }
+        }
+    },
+    scripting: {
+        executeScript: (options) => {
+            return new Promise((resolve, reject) => {
+                if (typeof chrome !== 'undefined' && chrome.scripting) {
+                    chrome.scripting.executeScript(options, (result) => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else {
+                            resolve(result);
+                        }
+                    });
+                } else {
+                    reject(new Error('Scripting API not available'));
+                }
+            });
+        }
     }
 };
 
@@ -116,11 +152,43 @@ function FormatDuration(d) {
     return Math.floor(d / divisor[0]) + ":" + pad(Math.floor((d % divisor[0]) / divisor[1]));
 }
 
-// When an alarm expires, close the tab
-ChromeAPIWrapper.alarms.onAlarm.addListener(function(alarm) {
-    ChromeAPIWrapper.tabs.remove(Number(alarm.name)).catch(error => {
-        console.error('Failed to remove tab:', error);
-    });
+// Function to pause YouTube video
+async function pauseYouTubeVideo(tabId) {
+    try {
+        await ChromeAPIWrapper.scripting.executeScript({
+            target: { tabId: tabId },
+            func: () => {
+                const video = document.querySelector('video');
+                if (video) {
+                    video.pause();
+                }
+            }
+        });
+        // Clear the badge text after pausing
+        await ChromeAPIWrapper.action.setBadgeText({ 'tabId': tabId, 'text': "" });
+    } catch (error) {
+        console.error('Failed to pause YouTube video:', error);
+    }
+}
+
+// When an alarm expires, handle the action
+ChromeAPIWrapper.alarms.onAlarm.addListener(async function(alarm) {
+    const tabId = Number(alarm.name);
+    try {
+        // Get the tab first to check if it's YouTube
+        const tab = await ChromeAPIWrapper.tabs.get(tabId);
+        const isYouTube = tab.url && tab.url.includes("youtube.com/watch");
+
+        if (isYouTube) {
+            // Always pause YouTube videos instead of closing
+            await pauseYouTubeVideo(tabId);
+        } else {
+            // For non-YouTube tabs, close them
+            await ChromeAPIWrapper.tabs.remove(tabId);
+        }
+    } catch (error) {
+        console.error('Failed to handle alarm:', error);
+    }
 });
 
 // When the user closes a tab, clear the associated alarm

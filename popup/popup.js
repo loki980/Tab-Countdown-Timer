@@ -1,6 +1,16 @@
 $( document ).ready(function() {
-    // Hide the cancel timer div until we need it
+    // Hide the cancel timer div and action options by default
     $("#cancelDiv").hide();
+    $(".action-options").hide();
+
+    // Check if current tab is YouTube and show/enable options accordingly
+    chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
+        const currentTab = tabs[0];
+        if (currentTab.url && currentTab.url.includes("youtube.com/watch")) {
+            $(".action-options").show();
+            $("#pauseVideo").prop('disabled', false);
+        }
+    });
 
     // retrieve the last alarm values that were used as default
     chrome.storage.local.get(["hours"], function(data){
@@ -23,22 +33,26 @@ $( document ).ready(function() {
 
     // Create tab countdown timer when the user sets one
     $("#startbutton").bind('click', function(e){
-        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
-            // name of the alarm is just the id of the active tab
-            chrome.alarms.create(tabs[0].id.toString(), {delayInMinutes: getCloseTimeInSeconds()/60} );
-            
-            // store these alarm values as defaults
-            chrome.storage.local.set({ "hours": $("#hours")[0].value }, function(){});
-            chrome.storage.local.set({ "minutes": $("#minutes")[0].value }, function(){});
+        chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
+            const tabId = tabs[0].id.toString();
+            let action = "close";  // Default action
 
-            function getCloseTimeInSeconds() {
-                var seconds = 0;
-                
-                seconds += Number($("#minutes")[0].value * 60);
-                seconds += Number($("#hours")[0].value * 60 * 60);
-            
-                return seconds;
+            // Only check radio if it's a YouTube tab
+            if (tabs[0].url && tabs[0].url.includes("youtube.com/watch")) {
+                action = $('input[name="timerAction"]:checked').val();
             }
+            
+            // Store the selected action with the alarm
+            chrome.storage.local.set({ 
+                [tabId + "_action"]: action,
+                "hours": $("#hours")[0].value,
+                "minutes": $("#minutes")[0].value 
+            });
+
+            // Create the alarm
+            chrome.alarms.create(tabId, {
+                delayInMinutes: getCloseTimeInSeconds()/60
+            });
         });
 
         // Close the popup
@@ -188,3 +202,12 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
         }
     });
 });
+
+function getCloseTimeInSeconds() {
+    var seconds = 0;
+    
+    seconds += Number($("#minutes")[0].value * 60);
+    seconds += Number($("#hours")[0].value * 60 * 60);
+
+    return seconds;
+}
