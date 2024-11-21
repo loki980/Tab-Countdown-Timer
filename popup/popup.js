@@ -1,3 +1,12 @@
+// Import ChromeAPIWrapper if in test environment
+let ChromeAPIWrapper;
+if (typeof require !== 'undefined') {
+    const background = require('../background/background.js');
+    ChromeAPIWrapper = background.ChromeAPIWrapper;
+} else {
+    ChromeAPIWrapper = chrome;
+}
+
 $( document ).ready(function() {
     // Hide the cancel timer div and action options by default
     $("#cancelDiv").hide();
