@@ -17,6 +17,13 @@ $( document ).ready(function() {
         const currentTab = tabs[0];
         const tabId = currentTab.id.toString();
 
+        // Check if there's an active alarm for this tab
+        chrome.alarms.get(tabId, function(alarm) {
+            if (alarm) {
+                $("#cancelDiv").show();
+            }
+        });
+
         if (currentTab.url && currentTab.url.includes("youtube.com/watch")) {
             $(".action-options").show();
             $("#pauseVideo").prop('disabled', false);
