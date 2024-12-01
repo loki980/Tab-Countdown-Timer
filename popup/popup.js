@@ -1,3 +1,12 @@
+// Import ChromeAPIWrapper if in test environment
+let ChromeAPIWrapper;
+if (typeof require !== 'undefined') {
+    const background = require('../background/background.js');
+    ChromeAPIWrapper = background.ChromeAPIWrapper;
+} else {
+    ChromeAPIWrapper = chrome;
+}
+
 $( document ).ready(function() {
     // Hide the cancel timer div and action options by default
     $("#cancelDiv").hide();
@@ -7,6 +16,13 @@ $( document ).ready(function() {
     chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
         const currentTab = tabs[0];
         const tabId = currentTab.id.toString();
+
+        // Check if there's an active alarm for this tab
+        chrome.alarms.get(tabId, function(alarm) {
+            if (alarm) {
+                $("#cancelDiv").show();
+            }
+        });
 
         if (currentTab.url && currentTab.url.includes("youtube.com/watch")) {
             $(".action-options").show();
