@@ -45,6 +45,9 @@ A browser extension for Chrome and Edge that allows you to set a countdown timer
 │   ├── popup.js        # Popup logic
 │   ├── styles.css      # Popup styling
 │   └── lib/            # Popup-specific libraries
+├── tests/              # Test files
+│   └── background.test.js  # Tests for background functionality
+├── jest.config.js      # Jest testing configuration
 └── manifest.json       # Extension manifest
 ```
 
