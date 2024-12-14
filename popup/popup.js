@@ -8,6 +8,18 @@ if (typeof require !== 'undefined') {
 }
 
 $( document ).ready(function() {
+    // Check if we're setting a domain rule
+    const urlParams = new URLSearchParams(window.location.search);
+    const setDomainRule = urlParams.get('setDomainRule');
+    
+    if (setDomainRule) {
+        // Change the UI for setting domain rule
+        $("h2").text("Set Timer for " + setDomainRule);
+        $("#startbutton").text("Save Domain Rule");
+        $(".action-options").hide();
+        $("#cancelDiv").hide();
+    }
+
     // Hide the cancel timer div and action options by default
     $("#cancelDiv").hide();
     $(".action-options").hide();
@@ -67,6 +79,23 @@ $( document ).ready(function() {
     // Create tab countdown timer when the user sets one
     $("#startbutton").on('click', async function(e) {
         try {
+            const urlParams = new URLSearchParams(window.location.search);
+            const setDomainRule = urlParams.get('setDomainRule');
+
+            if (setDomainRule) {
+                // Save domain rule
+                const data = await chrome.storage.local.get('domainRules');
+                const domainRules = data.domainRules || {};
+                
+                domainRules[setDomainRule] = {
+                    minutes: getCloseTimeInSeconds() / 60
+                };
+                
+                await chrome.storage.local.set({ domainRules });
+                window.close();
+                return;
+            }
+
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             const tabId = tabs[0].id.toString();
             let action = "close";  // Default action

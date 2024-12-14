@@ -279,6 +279,79 @@ async function UpdateBadges() {
 }
 setInterval(UpdateBadges, 1000);
 
+// Create context menu items
+chrome.runtime.onInstalled.addListener(() => {
+    chrome.contextMenus.create({
+        id: 'tabCountdownTimer',
+        title: 'Tab Countdown Timer',
+        contexts: ['action']
+    });
+
+    chrome.contextMenus.create({
+        id: 'setDomainRule',
+        parentId: 'tabCountdownTimer',
+        title: 'Set timer for this domain',
+        contexts: ['action']
+    });
+
+    chrome.contextMenus.create({
+        id: 'manageDomainRules',
+        parentId: 'tabCountdownTimer',
+        title: 'Manage domain rules',
+        contexts: ['action']
+    });
+});
+
+// Handle context menu clicks
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+    if (info.menuItemId === 'setDomainRule') {
+        // Get the domain from the current tab
+        const url = new URL(tab.url);
+        const domain = url.hostname;
+        
+        // Open popup to set timer for domain
+        const popup = await chrome.windows.create({
+            url: chrome.runtime.getURL('popup/popup.html') + '?setDomainRule=' + encodeURIComponent(domain),
+            type: 'popup',
+            width: 400,
+            height: 300
+        });
+    } else if (info.menuItemId === 'manageDomainRules') {
+        // Open domain rules management page
+        chrome.windows.create({
+            url: chrome.runtime.getURL('popup/domain-rules.html'),
+            type: 'popup',
+            width: 500,
+            height: 600
+        });
+    }
+});
+
+// Check for domain rules when a tab is updated
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' && tab.url) {
+        const url = new URL(tab.url);
+        const domain = url.hostname;
+        
+        // Check if there's a rule for this domain
+        const data = await chrome.storage.local.get('domainRules');
+        const domainRules = data.domainRules || {};
+        
+        if (domainRules[domain]) {
+            // Create an alarm for this tab
+            await chrome.alarms.create(tabId.toString(), {
+                delayInMinutes: domainRules[domain].minutes
+            });
+            
+            // Set initial badge color
+            await chrome.action.setBadgeBackgroundColor({ 
+                'tabId': tabId, 
+                'color': '#666666'
+            });
+        }
+    }
+});
+
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
