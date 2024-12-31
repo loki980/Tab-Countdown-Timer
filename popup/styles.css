@@ -1,153 +1,139 @@
 body {
     width: 300px;
-    padding: 10px;
+    margin: 0;
+    padding: 0;
     font-family: Arial, sans-serif;
+    background-color: #121a27;
+    color: #e8eaed;
 }
 
-@media (prefers-color-scheme: dark) {
-    body {
-        background-color: #202124;
-        color: #e8eaed;
-    }
+.top-bar {
+    background-color: #202733;
+    padding: 16px;
+    border-bottom: 1px solid #3B4252;
+}
 
-    input[type="number"] {
-        background-color: #292a2d;
-        color: #e8eaed;
-        border-color: #5f6368;
-    }
-
-    .preset-btn {
-        background: #292a2d !important;
-        color: #e8eaed !important;
-        border-color: #5f6368 !important;
-    }
-
-    .preset-btn:hover {
-        background: #3c4043 !important;
-    }
-
-    .action-options {
-        background: #292a2d !important;
-        border-color: #5f6368 !important;
-    }
-
-    .radio-group label {
-        color: #e8eaed !important;
-    }
-
-    .radio-group input[type="radio"]:disabled + label {
-        color: #9aa0a6 !important;
-    }
+.content {
+    padding: 16px;
 }
 
 h2 {
     text-align: center;
-    color: #333;
-    margin-top: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-    h2 {
-        color: #e8eaed;
-    }
+    color: #e8eaed;
+    margin: 0;
+    font-size: 2em;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .input-group {
-    margin: 10px 0;
+    margin: 12px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
 .input-group label {
-    margin-right: 10px;
+    margin-right: 12px;
+    color: #e8eaed;
+    font-size: 1.2em;
+    font-weight: 600;
 }
 
 .input-group input {
     width: 60px;
-    padding: 5px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    padding: 8px;
+    border: 1px solid #3B4252;
+    border-radius: 8px;
+    background-color: #2E3440;
+    color: #e8eaed;
 }
 
 .preset-buttons {
     display: flex;
     justify-content: space-between;
-    margin: 15px 0;
+    margin: 16px 0;
 }
 
 .preset-btn {
-    padding: 5px 10px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    background: #f8f8f8;
+    padding: 8px 16px;
+    border: 1px solid #3B4252;
+    border-radius: 8px;
+    background: #2E3440;
+    color: #e8eaed;
     cursor: pointer;
     font-size: 1.1em;
     font-weight: bold;
+    transition: background-color 0.2s;
 }
 
 .preset-btn:hover {
-    background: #eee;
+    background: #434C5E;
 }
 
 .button {
     width: 100%;
     padding: 12px;
-    margin: 10px 0;
-    background-color: #4CAF50;
+    margin: 12px 0;
+    background-color: #A3BE8C;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 1.2em;
     font-weight: bold;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    transition: background-color 0.2s;
 }
 
 .button:hover {
-    background-color: #45a049;
+    background-color: #8FA77C;
 }
 
 #cancelbutton {
-    background-color: #f44336;
+    background-color: #BF616A;
 }
 
 #cancelbutton:hover {
-    background-color: #da190b;
+    background-color: #A9474D;
 }
 
 #pausebutton {
-    background-color: #2196F3;
+    background-color: #79A7FF;
 }
 
 #pausebutton:hover {
-    background-color: #0b7dda;
+    background-color: #5C89FF;
+}
+
+#startbutton {
+    background-color: #A3BE8C;
+}
+
+#startbutton:hover {
+    background-color: #8FA77C;
 }
 
 #pausebutton.paused {
-    background-color: #4CAF50;
+    background-color: #79A7FF;
 }
 
 #timeRemaining {
     text-align: center;
     font-size: 2em;
     font-weight: bold;
-    margin: 15px 0;
-    padding: 10px;
+    margin: 16px 0;
+    padding: 12px;
     border-radius: 8px;
-    background-color: #f5f5f5;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-@media (prefers-color-scheme: dark) {
-    #timeRemaining {
-        background-color: #292a2d;
-    }
+    background-color: #2E3440;
+    color: #e8eaed;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
 }
 
 #timeRemaining.warning {
-    color: #ff0000;
+    color: #BF616A;
     animation: pulse 1s infinite;
 }
 
@@ -167,11 +153,11 @@ h2 {
 }
 
 .action-options {
-    margin: 15px auto;
-    padding: 10px;
-    border: 1px solid #eee;
-    border-radius: 4px;
-    background: #f9f9f9;
+    margin: 16px auto;
+    padding: 12px;
+    border: 1px solid #3B4252;
+    border-radius: 8px;
+    background: #2E3440;
     width: 35%;
 }
 
@@ -183,13 +169,14 @@ h2 {
 
 .radio-group input[type="radio"] {
     margin-right: 8px;
+    accent-color: #79A7FF;
 }
 
 .radio-group label {
-    color: #333;
+    color: #e8eaed;
 }
 
 .radio-group input[type="radio"]:disabled + label {
-    color: #999;
+    color: #4C566A;
     cursor: not-allowed;
 }
