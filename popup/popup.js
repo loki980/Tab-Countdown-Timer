@@ -28,11 +28,14 @@ $( document ).ready(function() {
             $(".action-options").show();
             $("#pauseVideo").prop('disabled', false);
 
-            // Load saved action preference for this tab
+            // Load saved action preference for this tab, default to "pause" if none exists
             chrome.storage.local.get([tabId + "_action"], function(data) {
                 const savedAction = data[tabId + "_action"];
                 if (savedAction) {
                     $(`input[name="timerAction"][value="${savedAction}"]`).prop('checked', true);
+                } else {
+                    // Default to "pause" for YouTube tabs
+                    $('input[name="timerAction"][value="pause"]').prop('checked', true);
                 }
             });
 
