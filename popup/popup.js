@@ -368,6 +368,7 @@ function getCloseTimeInSeconds() {
     
     seconds += Number($("#minutes")[0].value * 60);
     seconds += Number($("#hours")[0].value * 60 * 60);
-
+    seconds++;
+    
     return seconds;
 }
