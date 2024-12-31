@@ -89,13 +89,105 @@ $( document ).ready(function() {
                 'color': '#666666'
             });
 
-            // Create the alarm
+            // Create the alarm with exact milliseconds
+            const delayMs = getCloseTimeInSeconds() * 1000;
             await chrome.alarms.create(tabId, {
-                delayInMinutes: getCloseTimeInSeconds()/60
+                when: Date.now() + delayMs
             });
 
-            // Close the popup
-            window.close();
+            // Show the cancel div
+            $("#cancelDiv").show();
+            
+            // Get the current tab's alarm to sync with badge timer
+            chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+                const tabId = tabs[0].id.toString();
+                
+                // Clear any existing countdown interval
+                if (window.countdownInterval) {
+                    clearInterval(window.countdownInterval);
+                }
+
+                chrome.alarms.get(tabId, function(alarm) {
+                    if (alarm) {
+                        var countDownDate = alarm.scheduledTime;
+                        var isPaused = false;
+                        var pausedTimeRemaining = null;
+
+                        function updateCountdown() {
+                            if (isPaused) {
+                                if (pausedTimeRemaining) {
+                                    displayTime(pausedTimeRemaining);
+                                }
+                                return;
+                            }
+
+                            var now = new Date().getTime();
+                            var distance = countDownDate - now;
+                            
+                            displayTime(distance);
+                            
+                            if (distance < 0) {
+                                clearInterval(window.countdownInterval);
+                                document.getElementById("timeRemaining").innerHTML = "EXPIRED";
+                            }
+                        }
+
+                        function displayTime(distance) {
+                            var days = Math.floor(distance / (1000 * 60 * 60 * 24));
+                            var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)) + (days * 24);
+                            var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                            var seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                            
+                            const timeElement = document.getElementById("timeRemaining");
+                            timeElement.innerHTML = hours + "h " + minutes + "m " + seconds + "s ";
+
+                            const totalSeconds = hours * 3600 + minutes * 60 + seconds;
+                            if (totalSeconds <= 30) {
+                                timeElement.classList.add('warning');
+                            } else {
+                                timeElement.classList.remove('warning');
+                            }
+                        }
+
+                        // Update immediately
+                        updateCountdown();
+                        
+                        // Then update every 1 second
+                        window.countdownInterval = setInterval(updateCountdown, 1000);
+
+                        // Handle pause button
+                        $("#pausebutton").off('click').on('click', async function() {
+                            isPaused = !isPaused;
+                            $(this).toggleClass('paused');
+                            $(this).text(isPaused ? 'Resume' : 'Pause');
+
+                            if (isPaused) {
+                                pausedTimeRemaining = countDownDate - new Date().getTime();
+                            } else {
+                                countDownDate = new Date().getTime() + pausedTimeRemaining;
+                            }
+
+                            try {
+                                const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+                                const tabId = parseInt(tabs[0].id);
+                                if (isPaused) {
+                                    await chrome.alarms.clear(tabs[0].id.toString());
+                                    await chrome.action.setBadgeBackgroundColor({
+                                        'tabId': tabId,
+                                        'color': '#666666'
+                                    });
+                                } else {
+                                    await chrome.alarms.create(tabs[0].id.toString(), {
+                                        when: countDownDate
+                                    });
+                                }
+                            } catch (error) {
+                                console.error('Error handling pause:', error);
+                            }
+                        });
+                    }
+                });
+            });
         } catch (error) {
             console.error('Error starting timer:', error);
         }
@@ -260,8 +352,13 @@ chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
             // Update immediately on popup open
             updateCountdown();
             
+            // Clear any existing countdown interval
+            if (window.countdownInterval) {
+                clearInterval(window.countdownInterval);
+            }
+            
             // Then update every 1 second
-            var x = setInterval(updateCountdown, 1000);
+            window.countdownInterval = setInterval(updateCountdown, 1000);
         }
     });
 });
@@ -271,6 +368,7 @@ function getCloseTimeInSeconds() {
     
     seconds += Number($("#minutes")[0].value * 60);
     seconds += Number($("#hours")[0].value * 60 * 60);
-
+    seconds++;
+    
     return seconds;
 }
