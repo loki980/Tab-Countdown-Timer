@@ -37,6 +37,13 @@ const ChromeAPIWrapper = {
                     resolve([]);
                 }
             });
+        },
+        create: (name, alarmInfo) => {
+            if (typeof chrome !== 'undefined' && chrome.alarms) {
+                chrome.alarms.create(name, alarmInfo);
+            }
+            // Since chrome.alarms.create is synchronous, we don't need a Promise
+            return Promise.resolve();
         }
     },
     tabs: {
@@ -114,6 +121,21 @@ const ChromeAPIWrapper = {
                         });
                     } else {
                         resolve({});
+                    }
+                });
+            },
+            set: (items) => {
+                return new Promise((resolve, reject) => {
+                    if (typeof chrome !== 'undefined' && chrome.storage) {
+                        chrome.storage.local.set(items, () => {
+                            if (chrome.runtime.lastError) {
+                                reject(chrome.runtime.lastError);
+                            } else {
+                                resolve();
+                            }
+                        });
+                    } else {
+                        resolve();
                     }
                 });
             }
@@ -279,12 +301,100 @@ async function UpdateBadges() {
 }
 setInterval(UpdateBadges, 1000);
 
+// Function to calculate milliseconds until next 10 PM
+function getMillisecondsUntil10PM() {
+    const now = new Date();
+    let target = new Date(now);
+    target.setHours(22, 0, 0, 0);
+
+    // If it's already past 10 PM, set timer for tomorrow at 10 PM
+    if (now >= target) {
+        target.setDate(target.getDate() + 1);
+    }
+
+    return target.getTime() - now.getTime();
+}
+
+// Function to set timer for YouTube tab
+async function setYouTubeTimer(tab) {
+    const delayMs = getMillisecondsUntil10PM();
+    const tabId = tab.id.toString();
+
+    try {
+        // Set the action to pause for YouTube videos
+        await ChromeAPIWrapper.storage.local.set({
+            [tabId + "_action"]: "pause"
+        });
+
+        // Set initial badge color
+        await ChromeAPIWrapper.action.setBadgeBackgroundColor({
+            'tabId': parseInt(tabId),
+            'color': '#666666'
+        });
+
+        // Create the alarm for 10 PM
+        await ChromeAPIWrapper.alarms.create(tabId, {
+            when: Date.now() + delayMs
+        });
+    } catch (error) {
+        console.error('Failed to set YouTube timer:', error);
+    }
+}
+
+// Check for YouTube tabs and set timers when needed
+async function checkAndSetYouTubeTimers() {
+    if (typeof chrome !== 'undefined' && chrome.tabs) {
+        try {
+            const tabs = await new Promise((resolve) => {
+                chrome.tabs.query({}, resolve);
+            });
+
+            for (const tab of tabs) {
+                if (tab.url && tab.url.includes("youtube.com/watch")) {
+                    // Check if there's already an alarm for this tab
+                    const alarm = await new Promise((resolve) => {
+                        chrome.alarms.get(tab.id.toString(), resolve);
+                    });
+
+                    // Only set a new timer if there isn't one already
+                    if (!alarm) {
+                        await setYouTubeTimer(tab);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Failed to check YouTube tabs:', error);
+        }
+    }
+}
+
+// Run the check when the extension starts
+checkAndSetYouTubeTimers();
+
+// Also check when a new tab is created or updated
+if (typeof chrome !== 'undefined' && chrome.tabs) {
+    chrome.tabs.onCreated.addListener((tab) => {
+        if (tab.url && tab.url.includes("youtube.com/watch")) {
+            setYouTubeTimer(tab);
+        }
+    });
+
+    chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+        if (changeInfo.url && changeInfo.url.includes("youtube.com/watch")) {
+            setYouTubeTimer(tab);
+        }
+    });
+}
+
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         FormatDuration,
         ChromeAPIWrapper,
         HandleRemove,
-        UpdateBadges: UpdateBadges
+        UpdateBadges: UpdateBadges,
+        getMillisecondsUntil10PM,
+        setYouTubeTimer,
+        checkAndSetYouTubeTimers
     };
 }
