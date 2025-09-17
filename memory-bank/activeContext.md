@@ -1,13 +1,13 @@
 # Active Context
 
 ## Current Work Focus
-Initializing the memory bank by creating and updating the core files.
+Ensuring YouTube auto timers do not override user-configured countdowns.
 
 ## Recent Changes
-Created the core files (projectbrief.md, productContext.md, activeContext.md, systemPatterns.md, techContext.md, progress.md) and the .clinerules file. Updated projectbrief.md and productContext.md with initial information.
+Updated `background/background.js` so auto-created 10 PM alarms skip tabs that already have an alarm set, preventing manual timers from being reset.
 
 ## Next Steps
-Update systemPatterns.md, techContext.md, and progress.md with relevant information about the project.
+Confirm whether any additional scheduling preferences are needed beyond the 10 PM default.
 
 ## Active Decisions and Considerations
-None at this time.
+Automatic YouTube timers now run only when a tab lacks an alarm; existing alarms are preserved to respect user overrides.

@@ -8,6 +8,21 @@ const ChromeAPIWrapper = {
                 }
             }
         },
+        get: (name) => {
+            return new Promise((resolve, reject) => {
+                if (typeof chrome !== 'undefined' && chrome.alarms) {
+                    chrome.alarms.get(name, (alarm) => {
+                        if (chrome.runtime.lastError) {
+                            reject(chrome.runtime.lastError);
+                        } else {
+                            resolve(alarm);
+                        }
+                    });
+                } else {
+                    resolve(undefined);
+                }
+            });
+        },
         clear: (name) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
@@ -317,10 +332,16 @@ function getMillisecondsUntil10PM() {
 
 // Function to set timer for YouTube tab
 async function setYouTubeTimer(tab) {
-    const delayMs = getMillisecondsUntil10PM();
     const tabId = tab.id.toString();
 
     try {
+        const existingAlarm = await ChromeAPIWrapper.alarms.get(tabId);
+        if (existingAlarm) {
+            return;
+        }
+
+        const delayMs = getMillisecondsUntil10PM();
+
         // Set the action to pause for YouTube videos
         await ChromeAPIWrapper.storage.local.set({
             [tabId + "_action"]: "pause"
