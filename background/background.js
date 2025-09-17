@@ -320,7 +320,7 @@ setInterval(UpdateBadges, 1000);
 function getMillisecondsUntil10PM() {
     const now = new Date();
     let target = new Date(now);
-    target.setHours(22, 0, 0, 0);
+    target.setHours(22, 0, 0, 0); // 10 PM
 
     // If it's already past 10 PM, set timer for tomorrow at 10 PM
     if (now >= target) {

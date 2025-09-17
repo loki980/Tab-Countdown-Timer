@@ -381,19 +381,65 @@ describe('Background Script Utility Functions', () => {
       await expect(setYouTubeTimer(mockTab)).resolves.not.toThrow();
     });
 
+    test('setYouTubeTimer does not create a new alarm if one already exists', async () => {
+      const mockTab = { id: 123, url: 'https://youtube.com/watch?v=abc' };
+      const existingAlarm = { name: '123', scheduledTime: Date.now() + 100000 };
+
+      // Mock ChromeAPIWrapper.alarms.get to return an existing alarm
+      const originalGet = ChromeAPIWrapper.alarms.get;
+      ChromeAPIWrapper.alarms.get = jest.fn().mockResolvedValue(existingAlarm);
+
+      await setYouTubeTimer(mockTab);
+
+      // Expect that chrome.alarms.create was not called
+      expect(global.chrome.alarms.create).not.toHaveBeenCalled();
+      
+      // Restore original method
+      ChromeAPIWrapper.alarms.get = originalGet;
+    });
+
+    test('setYouTubeTimer creates a new alarm if one does not exist', async () => {
+      const mockTab = { id: 456, url: 'https://youtube.com/watch?v=def' };
+
+      // Mock ChromeAPIWrapper methods
+      const originalGet = ChromeAPIWrapper.alarms.get;
+      const originalStorageSet = ChromeAPIWrapper.storage.local.set;
+      const originalSetBadgeColor = ChromeAPIWrapper.action.setBadgeBackgroundColor;
+      const originalAlarmsCreate = ChromeAPIWrapper.alarms.create;
+
+      ChromeAPIWrapper.alarms.get = jest.fn().mockResolvedValue(null);
+      ChromeAPIWrapper.storage.local.set = jest.fn().mockResolvedValue();
+      ChromeAPIWrapper.action.setBadgeBackgroundColor = jest.fn();
+      ChromeAPIWrapper.alarms.create = jest.fn().mockResolvedValue();
+
+      await setYouTubeTimer(mockTab);
+
+      // Expect that ChromeAPIWrapper.alarms.create was called
+      expect(ChromeAPIWrapper.alarms.create).toHaveBeenCalled();
+      
+      // Restore original methods
+      ChromeAPIWrapper.alarms.get = originalGet;
+      ChromeAPIWrapper.storage.local.set = originalStorageSet;
+      ChromeAPIWrapper.action.setBadgeBackgroundColor = originalSetBadgeColor;
+      ChromeAPIWrapper.alarms.create = originalAlarmsCreate;
+    });
+
     test('setYouTubeTimer handles errors gracefully', async () => {
       const mockTab = { id: 123, url: 'https://youtube.com/watch?v=abc' };
+      const testError = new Error('Alarm get error');
       
-      // Mock storage.set to call callback with error
-      chrome.storage.local.set.mockImplementation((items, callback) => {
-        throw new Error('Storage error');
-      });
+      // Mock ChromeAPIWrapper.alarms.get to throw an error
+      const originalGet = ChromeAPIWrapper.alarms.get;
+      ChromeAPIWrapper.alarms.get = jest.fn().mockRejectedValue(testError);
       
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       
       await setYouTubeTimer(mockTab);
       
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to set YouTube timer:', expect.any(Error));
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to set YouTube timer:', testError);
+      
+      // Restore original methods
+      ChromeAPIWrapper.alarms.get = originalGet;
       consoleSpy.mockRestore();
     });
 
