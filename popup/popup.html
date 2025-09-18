@@ -20,6 +20,8 @@
                 <input type="number" id="minutes" name="minutes" value="30" min="0" max="59" step="1">
             </div>
 
+            <div class="section-divider"></div>
+
             <div class="preset-buttons">
                 <button class="preset-btn" data-minutes="5">5m</button>
                 <button class="preset-btn" data-minutes="15">15m</button>
@@ -27,7 +29,10 @@
                 <button class="preset-btn" data-hours="1">1h</button>
             </div>
 
-            <div class="action-options">
+            <div class="section-divider"></div>
+
+            <fieldset class="action-options">
+                <p class="fieldset-title">When time’s up</p>
                 <div class="radio-group">
                     <input type="radio" id="closeTab" name="timerAction" value="close" checked>
                     <label for="closeTab">Close Tab</label>
@@ -36,16 +41,17 @@
                     <input type="radio" id="pauseVideo" name="timerAction" value="pause" disabled>
                     <label for="pauseVideo">Pause Video</label>
                 </div>
-            </div>
+            </fieldset>
 
-            <button id="startbutton" class="button">Start countdown</button>
+            <button id="startbutton" class="button">Start timer</button>
             
             <div id="cancelDiv">
                 <div class="timer-controls">
-                    <button id="cancelbutton" class="button">Cancel</button>
+                    <button id="cancelbutton" class="button">Stop timer</button>
                     <button id="pausebutton" class="button">Pause</button>
                 </div>
                 <p id="timeRemaining"></p>
+                <p id="eta" class="helper-caption"></p>
             </div>
         </div>
 

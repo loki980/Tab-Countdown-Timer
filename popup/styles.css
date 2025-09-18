@@ -14,7 +14,7 @@ body {
 }
 
 .content {
-    padding: 20px;
+    padding: 20px 20px 12px;
 }
 
 h2 {
@@ -28,7 +28,7 @@ h2 {
 }
 
 .input-group {
-    margin: 16px 0;
+    margin: 12px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -53,7 +53,7 @@ h2 {
 .preset-buttons {
     display: flex;
     justify-content: space-between;
-    margin: 20px 0;
+    margin: 16px 0;
     gap: 8px;
 }
 
@@ -128,7 +128,7 @@ h2 {
     font-weight: bold;
     width: 100%;
     max-width: 100%;
-    margin: 16px 0;
+    margin: 12px 0 8px;
     padding: 12px 8px;
     border-radius: 8px;
     background-color: #2E3440;
@@ -161,8 +161,8 @@ h2 {
 }
 
 .action-options {
-    margin: 16px 0;
-    padding: 16px;
+    margin: 12px 0;
+    padding: 12px 16px;
     border: 1px solid #3B4252;
     border-radius: 8px;
     background: #2E3440;
@@ -170,10 +170,21 @@ h2 {
     box-sizing: border-box;
 }
 
+.fieldset-title {
+    margin: 0 0 12px 0;
+    padding: 0;
+    font-weight: 600;
+    color: #e8eaed;
+}
+
 .radio-group {
-    margin: 8px 0;
+    margin: 0;
     display: flex;
     align-items: center;
+}
+
+.radio-group:not(:last-child) {
+    margin-bottom: 12px;
 }
 
 .radio-group input[type="radio"] {
@@ -193,13 +204,13 @@ h2 {
 .section-divider {
     height: 1px;
     background: linear-gradient(to right, transparent, #3B4252, transparent);
-    margin: 20px 0;
+    margin: 16px 0;
 }
 
 .timer-controls {
     display: flex;
     gap: 8px;
-    margin-top: 16px;
+    margin-top: 12px;
 }
 
 .timer-controls .button {
@@ -209,4 +220,30 @@ h2 {
 
 .button {
     margin: 8px 0;
+}
+
+/* Disabled state for primary/secondary actions */
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Distinct visual state when paused */
+#pausebutton.paused {
+    background-color: #E0A458;
+}
+#pausebutton.paused:hover {
+    background-color: #CC8D3E;
+}
+
+/* Helper caption (for action summary and ETA) */
+.helper-caption {
+    margin: 4px 0 0 0;
+    color: #cfd2d6;
+    font-size: 0.9em;
+    text-align: center;
+}
+/* Tighten bottom spacing for ETA line */
+#eta {
+    margin-bottom: 0;
 }
