@@ -390,7 +390,7 @@ async function checkAndSetYouTubeTimers() {
 }
 
 // Run the check when the extension starts
-checkAndSetYouTubeTimers();
+// checkAndSetYouTubeTimers();
 
 // Also check when a new tab is created or updated
 if (typeof chrome !== 'undefined' && chrome.tabs) {
