@@ -2,12 +2,14 @@
 const ChromeAPIWrapper = {
     alarms: {
         onAlarm: {
+            // Safely adds a listener for alarm events.  Used for testing.
             addListener: (callback) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
                     chrome.alarms.onAlarm.addListener(callback);
                 }
             }
         },
+        // Retrieves an alarm by its name.
         get: (name) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
@@ -23,6 +25,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Clears an alarm by its name.
         clear: (name) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
@@ -38,6 +41,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Retrieves all active alarms.
         getAll: () => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
@@ -53,6 +57,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Creates a new alarm.
         create: (name, alarmInfo) => {
             if (typeof chrome !== 'undefined' && chrome.alarms) {
                 chrome.alarms.create(name, alarmInfo);
@@ -63,12 +68,14 @@ const ChromeAPIWrapper = {
     },
     tabs: {
         onRemoved: {
+            // Adds a listener for when a tab is closed.
             addListener: (callback) => {
                 if (typeof chrome !== 'undefined' && chrome.tabs) {
                     chrome.tabs.onRemoved.addListener(callback);
                 }
             }
         },
+        // Removes or closes a tab by its ID.
         remove: (tabId) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.tabs) {
@@ -84,6 +91,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Retrieves details about a specific tab by its ID.
         get: (tabId) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.tabs) {
@@ -99,6 +107,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Checks if a tab exists by its ID.
         exists: (tabId) => {
             return new Promise((resolve) => {
                 if (typeof chrome !== 'undefined' && chrome.tabs) {
@@ -116,11 +125,13 @@ const ChromeAPIWrapper = {
         }
     },
     action: {
+        // Sets the background color of the extension's badge.
         setBadgeBackgroundColor: (color) => {
             if (typeof chrome !== 'undefined' && chrome.action) {
                 chrome.action.setBadgeBackgroundColor(color);
             }
         },
+        // Sets the text on the extension's badge.
         setBadgeText: (options) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.action) {
@@ -139,6 +150,7 @@ const ChromeAPIWrapper = {
     },
     storage: {
         local: {
+            // Retrieves an item from local storage.
             get: (key) => {
                 return new Promise((resolve, reject) => {
                     if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -154,6 +166,7 @@ const ChromeAPIWrapper = {
                     }
                 });
             },
+            // Sets an item in local storage.
             set: (items) => {
                 return new Promise((resolve, reject) => {
                     if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -172,6 +185,7 @@ const ChromeAPIWrapper = {
         }
     },
     scripting: {
+        // Executes a script in the context of a specific tab.  Used to pause YouTube
         executeScript: (options) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.scripting) {
