@@ -14,10 +14,9 @@
 - **Accessibility:** While the core UI is functional, further accessibility improvements (such as `aria-live` regions for screen readers) could be implemented.
 - **Content Script:** A content script could enable more direct and reliable interaction with YouTube's video player, potentially offering more features than the current background script approach.
 - **Error Handling:** More robust error handling could be added around Chrome API calls.
-- **"Auto-pause at" feature** Currently this is hard-coded to 10pm and always on.
 
 ## Current Status
-A major UI/UX overhaul has been completed based on an expert evaluation. The popup is now more user-friendly, visually polished, and resilient. The immediate next step is to ensure stability and monitor for any regressions.
+Version 1.3.0 has been released. The extension is stable. The "auto-pause at 10pm" feature was removed.
 
 ## Known Issues
-None. The previously identified UI layout issues (redundant text, scrollbars) have been resolved.
+None. The previously identified UI layout and light mode rendering issues have been resolved.
