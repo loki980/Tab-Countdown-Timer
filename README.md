@@ -2,8 +2,8 @@
 
 A browser extension for Chrome and Edge that allows you to set a countdown timer for any tab. When the timer reaches zero, the tab automatically closes. Perfect for time management, limiting time spent on specific websites, or setting reminders.
 
-<img src="https://developer.chrome.com/static/docs/webstore/branding/image/206x58-chrome-web-bcb82d15b2486.png" alt="Available in the Chrome Web Store" width="206" height="58">
-<img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft Edge Add-ons" width="206" height="58">
+<a href="https://chrome.google.com/webstore/detail/tab-countdown-timer/maoljenpfpdblggdbnhmegofbhhcdgle"><img src="https://developer.chrome.com/static/docs/webstore/branding/image/206x58-chrome-web-bcb82d15b2486.png" alt="Available in the Chrome Web Store" width="206" height="58"></a>
+<a href="https://microsoftedge.microsoft.com/addons/detail/tab-countdown-timer/mmocngnpdhbhikbhonekemkafnkccgan"><img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft Edge Add-ons" width="206" height="58"></a>
 
 ## Features
 
@@ -37,18 +37,27 @@ A browser extension for Chrome and Edge that allows you to set a countdown timer
 
 ```
 ├── background/
-│   └── background.js    # Handles alarm actions and badge countdown
-├── icons/              # Extension icons in various sizes
-├── lib/                # Third-party libraries
-├── popup/              # Popup interface
-│   ├── popup.html      # Popup UI
-│   ├── popup.js        # Popup logic
-│   ├── styles.css      # Popup styling
-│   └── lib/            # Popup-specific libraries
-├── tests/              # Test files
-│   └── background.test.js  # Tests for background functionality
-├── jest.config.js      # Jest testing configuration
-└── manifest.json       # Extension manifest
+│   └── background.js        # Handles alarm actions and badge countdown
+├── coverage/                # Test coverage reports
+├── icons/                   # Extension icons in various sizes
+├── lib/                     # Third-party libraries (e.g., jQuery)
+├── memory-bank/             # Project documentation and context
+├── popup/                   # Popup interface
+│   ├── popup.html           # Popup UI
+│   ├── popup.js             # Popup logic
+│   └── styles.css           # Popup styling
+├── reports/                 # Test reports
+├── tests/                   # Test files
+│   ├── background.test.js   # Tests for background functionality
+│   ├── popup.test.js        # Tests for popup functionality
+│   └── setup/
+│       └── chrome-mocks.js  # Mocks for Chrome APIs
+├── .gitignore               # Git ignore rules
+├── jest.config.js           # Jest testing configuration
+├── jest.setup.js            # Jest setup file
+├── manifest.json            # Extension manifest
+├── package.json             # Project dependencies and scripts
+└── README.md                # This file
 ```
 
 ## Development
@@ -104,7 +113,7 @@ Current tests cover:
 - Basic extension functionality verification
 
 ### Adding New Tests
-- Place test files in the `__tests__` directory
+- Place test files in the `tests/` directory
 - Use `.test.js` or `.spec.js` file extensions
 - Follow existing test structure and mocking patterns
 
