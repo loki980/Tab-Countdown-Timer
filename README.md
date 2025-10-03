@@ -1,6 +1,6 @@
 # Tab Countdown Timer
 
-A browser extension for Chrome and Edge that allows you to set a countdown timer for any tab. When the timer reaches zero, the tab automatically closes. Perfect for time management, limiting time spent on specific websites, or setting reminders.
+A browser extension for Chrome and Edge that allows you to set a countdown timer for any tab. When the timer reaches zero, the tab automatically closes. Perfect for time management, limiting time spent on specific websites, setting reminders or pausing bedtime stories being played on YouTube.
 
 <a href="https://chrome.google.com/webstore/detail/tab-countdown-timer/maoljenpfpdblggdbnhmegofbhhcdgle"><img src="https://developer.chrome.com/static/docs/webstore/branding/image/206x58-chrome-web-bcb82d15b2486.png" alt="Available in the Chrome Web Store" width="206" height="58"></a>
 <a href="https://microsoftedge.microsoft.com/addons/detail/tab-countdown-timer/mmocngnpdhbhikbhonekemkafnkccgan"><img src="https://get.microsoft.com/images/en-us%20dark.svg" alt="Get it from Microsoft Edge Add-ons" width="206" height="58"></a>
