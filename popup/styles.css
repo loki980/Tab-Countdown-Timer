@@ -1,123 +1,295 @@
 :root {
-    --primary-color: #336dab;
-    --danger-color: #ff0040;
-    --bg-color: #ffffff;
-    --text-color: #333333;
-    --input-bg: #f5f5f5;
-    --input-border: #e0e0e0;
-    --shadow-color: rgba(0, 0, 0, 0.1);
+    color-scheme: dark light;
+    --bg: #121a27;
+    --text: #e8eaed;
+    --header-bg: #202733;
+    --divider: #3b4252;
+    --input-bg: #2e3440;
+    --input-border: #3b4252;
+    --preset-bg: #2e3440;
+    --preset-border: #3b4252;
+    --preset-hover: #434c5e;
+    --button-text: #ffffff;
+    --button-primary-bg: #a3be8c;
+    --button-primary-hover: #8fa77c;
+    --button-cancel-bg: #bf616a;
+    --button-cancel-hover: #a9474d;
+    --button-pause-bg: #79a7ff;
+    --button-pause-hover: #5c89ff;
+    --button-pause-paused-bg: #e0a458;
+    --button-pause-paused-hover: #cc8d3e;
+    --time-remaining-bg: #2e3440;
+    --time-remaining-warning: #bf616a;
+    --helper-text: #cfd2d6;
+    --radio-disabled: #4c566a;
+    --accent: #79a7ff;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
     :root {
-        --primary-color: #4a80c0;
-        --danger-color: #ff1a4d;
-        --bg-color: #2d2d2d;
-        --text-color: #e0e0e0;
-        --input-bg: #3d3d3d;
-        --input-border: #4d4d4d;
-        --shadow-color: rgba(0, 0, 0, 0.3);
+        color-scheme: light dark;
+        --bg: #f5f7fb;
+        --text: #1f2933;
+        --header-bg: #ffffff;
+        --divider: #d2dae6;
+        --input-bg: #ffffff;
+        --input-border: #c5cedb;
+        --preset-bg: #e7edf7;
+        --preset-border: #c5cedb;
+        --preset-hover: #d4def2;
+        --button-text: #ffffff;
+        --button-primary-bg: #2f855a;
+        --button-primary-hover: #276749;
+        --button-cancel-bg: #d64550;
+        --button-cancel-hover: #b7353f;
+        --button-pause-bg: #1a73e8;
+        --button-pause-hover: #155ec2;
+        --button-pause-paused-bg: #f6b16a;
+        --button-pause-paused-hover: #dd923f;
+        --time-remaining-bg: #e7edf7;
+        --time-remaining-warning: #c92a2a;
+        --helper-text: #52606d;
+        --radio-disabled: #95a1b0;
+        --accent: #1a73e8;
     }
 }
 
-* {
+body {
+    width: 350px;
     margin: 0;
     padding: 0;
-    box-sizing: border-box;
-    transition: all 0.3s ease;
+    font-family: Arial, sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
 }
 
-body {
-    width: 300px;
-    padding: 20px;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    background-color: var(--bg-color);
-    color: var(--text-color);
+.top-bar {
+    background-color: var(--header-bg);
+    padding: 16px;
+    border-bottom: 1px solid var(--divider);
+}
+
+.content {
+    padding: 20px 20px 12px;
 }
 
 h2 {
-    margin-bottom: 20px;
-    font-size: 1.5rem;
-    font-weight: 600;
     text-align: center;
+    color: var(--text);
+    margin: 0;
+    font-size: 2em;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .input-group {
-    margin-bottom: 15px;
-}
-
-label {
-    display: block;
-    margin-bottom: 5px;
-    font-weight: 500;
-    font-size: 0.9rem;
-}
-
-input[type="text"] {
-    width: 100%;
-    padding: 10px;
-    border: 2px solid var(--input-border);
-    border-radius: 8px;
-    background-color: var(--input-bg);
-    color: var(--text-color);
-    font-size: 1rem;
-    outline: none;
-}
-
-input[type="text"]:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 2px var(--primary-color, 0.2);
-}
-
-.button {
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.button:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px var(--shadow-color);
-}
-
-.button:active {
-    transform: translateY(0);
-    box-shadow: 0 2px 4px var(--shadow-color);
-}
-
-#startbutton {
-    width: 100%;
-    padding: 12px;
-    background-color: var(--primary-color);
-    color: white;
-    font-size: 1rem;
-    margin-bottom: 15px;
-}
-
-#cancelDiv {
+    margin: 12px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+}
+
+.input-group label {
+    margin-right: 12px;
+    color: var(--text);
+    font-size: 1.2em;
+    font-weight: 600;
+}
+
+.input-group input {
+    width: 60px;
+    padding: 8px;
+    border: 1px solid var(--input-border);
+    border-radius: 8px;
+    background-color: var(--input-bg);
+    color: var(--text);
+}
+
+.preset-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin: 16px 0;
+    gap: 8px;
+}
+
+.preset-btn {
+    padding: 10px 16px;
+    border: 1px solid var(--preset-border);
+    border-radius: 8px;
+    background: var(--preset-bg);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 1.1em;
+    font-weight: bold;
+    transition: all 0.2s;
+    flex: 1;
+}
+
+.preset-btn:hover {
+    background: var(--preset-hover);
+}
+
+.button {
     width: 100%;
+    padding: 12px;
+    margin: 8px 0;
+    background-color: var(--button-primary-bg);
+    color: var(--button-text);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1.2em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: background-color 0.2s;
+}
+
+.button:hover {
+    background-color: var(--button-primary-hover);
+}
+
+#startbutton {
+    background-color: var(--button-primary-bg);
+}
+
+#startbutton:hover {
+    background-color: var(--button-primary-hover);
 }
 
 #cancelbutton {
-    background-color: var(--danger-color);
-    color: white;
-    padding: 8px 12px;
-    font-size: 0.9rem;
-    min-width: 70px;
+    background-color: var(--button-cancel-bg);
+}
+
+#cancelbutton:hover {
+    background-color: var(--button-cancel-hover);
+}
+
+#pausebutton {
+    background-color: var(--button-pause-bg);
+}
+
+#pausebutton:hover {
+    background-color: var(--button-pause-hover);
+}
+
+#pausebutton.paused {
+    background-color: var(--button-pause-paused-bg);
+}
+
+#pausebutton.paused:hover {
+    background-color: var(--button-pause-paused-hover);
 }
 
 #timeRemaining {
-    font-family: 'Courier New', monospace;
-    font-size: 0.95rem;
+    text-align: center;
+    font-size: 1.4em;
+    font-weight: bold;
+    width: 100%;
+    max-width: 100%;
+    margin: 12px 0 8px;
+    padding: 12px 8px;
+    border-radius: 8px;
+    background-color: var(--time-remaining-bg);
+    color: var(--text);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    letter-spacing: 0.3px;
+    box-sizing: border-box;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+#timeRemaining.warning {
+    color: var(--time-remaining-warning);
+    animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.05);
+        opacity: 0.8;
+    }
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.action-options {
+    margin: 12px 0;
+    padding: 12px 16px;
+    border: 1px solid var(--divider);
+    border-radius: 8px;
+    background: var(--preset-bg);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.fieldset-title {
+    margin: 0 0 12px 0;
+    padding: 0;
     font-weight: 600;
-    color: var(--text-color);
-    text-align: right;
-    flex-grow: 1;
-    white-space: nowrap;
+    color: var(--text);
+}
+
+.radio-group {
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.radio-group:not(:last-child) {
+    margin-bottom: 12px;
+}
+
+.radio-group input[type="radio"] {
+    margin-right: 8px;
+    accent-color: var(--accent);
+}
+
+.radio-group label {
+    color: var(--text);
+}
+
+.radio-group input[type="radio"]:disabled + label {
+    color: var(--radio-disabled);
+    cursor: not-allowed;
+}
+
+.section-divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--divider), transparent);
+    margin: 16px 0;
+}
+
+.timer-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.timer-controls .button {
+    flex: 1;
+    margin: 0;
+}
+
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.helper-caption {
+    margin: 4px 0 0 0;
+    color: var(--helper-text);
+    font-size: 0.9em;
+    text-align: center;
+}
+
+#eta {
+    margin-bottom: 0;
 }
