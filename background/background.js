@@ -2,12 +2,14 @@
 const ChromeAPIWrapper = {
     alarms: {
         onAlarm: {
+            // Safely adds a listener for alarm events.  Used for testing.
             addListener: (callback) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
                     chrome.alarms.onAlarm.addListener(callback);
                 }
             }
         },
+        // Retrieves an alarm by its name.
         get: (name) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
@@ -23,6 +25,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Clears an alarm by its name.
         clear: (name) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
@@ -38,6 +41,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Retrieves all active alarms.
         getAll: () => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.alarms) {
@@ -53,6 +57,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Creates a new alarm.
         create: (name, alarmInfo) => {
             if (typeof chrome !== 'undefined' && chrome.alarms) {
                 chrome.alarms.create(name, alarmInfo);
@@ -63,12 +68,14 @@ const ChromeAPIWrapper = {
     },
     tabs: {
         onRemoved: {
+            // Adds a listener for when a tab is closed.
             addListener: (callback) => {
                 if (typeof chrome !== 'undefined' && chrome.tabs) {
                     chrome.tabs.onRemoved.addListener(callback);
                 }
             }
         },
+        // Removes or closes a tab by its ID.
         remove: (tabId) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.tabs) {
@@ -84,6 +91,7 @@ const ChromeAPIWrapper = {
                 }
             });
         },
+        // Retrieves details about a specific tab by its ID.
         get: (tabId) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.tabs) {
@@ -98,14 +106,32 @@ const ChromeAPIWrapper = {
                     reject(new Error('Tabs API not available'));
                 }
             });
+        },
+        // Checks if a tab exists by its ID.
+        exists: (tabId) => {
+            return new Promise((resolve) => {
+                if (typeof chrome !== 'undefined' && chrome.tabs) {
+                    chrome.tabs.get(tabId, (tab) => {
+                        if (chrome.runtime.lastError || !tab) {
+                            resolve(false);
+                        } else {
+                            resolve(true);
+                        }
+                    });
+                } else {
+                    resolve(false);
+                }
+            });
         }
     },
     action: {
+        // Sets the background color of the extension's badge.
         setBadgeBackgroundColor: (color) => {
             if (typeof chrome !== 'undefined' && chrome.action) {
                 chrome.action.setBadgeBackgroundColor(color);
             }
         },
+        // Sets the text on the extension's badge.
         setBadgeText: (options) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.action) {
@@ -124,6 +150,7 @@ const ChromeAPIWrapper = {
     },
     storage: {
         local: {
+            // Retrieves an item from local storage.
             get: (key) => {
                 return new Promise((resolve, reject) => {
                     if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -139,6 +166,7 @@ const ChromeAPIWrapper = {
                     }
                 });
             },
+            // Sets an item in local storage.
             set: (items) => {
                 return new Promise((resolve, reject) => {
                     if (typeof chrome !== 'undefined' && chrome.storage) {
@@ -157,6 +185,7 @@ const ChromeAPIWrapper = {
         }
     },
     scripting: {
+        // Executes a script in the context of a specific tab.  Used to pause YouTube
         executeScript: (options) => {
             return new Promise((resolve, reject) => {
                 if (typeof chrome !== 'undefined' && chrome.scripting) {
@@ -216,6 +245,12 @@ async function pauseYouTubeVideo(tabId) {
 ChromeAPIWrapper.alarms.onAlarm.addListener(async function(alarm) {
     const tabId = Number(alarm.name);
     try {
+        const tabExists = await ChromeAPIWrapper.tabs.exists(tabId);
+        if (!tabExists) {
+            await ChromeAPIWrapper.alarms.clear(alarm.name);
+            return;
+        }
+
         // Get the tab first to check if it's YouTube
         const tab = await ChromeAPIWrapper.tabs.get(tabId);
         const isYouTube = tab.url && tab.url.includes("youtube.com/watch");
@@ -277,14 +312,16 @@ async function UpdateBadges() {
         const alarms = await ChromeAPIWrapper.alarms.getAll();
         
         for (const alarm of alarms) {
-            try {
-                await ChromeAPIWrapper.tabs.get(parseInt(alarm.name));
+            const tabId = parseInt(alarm.name);
+            const tabExists = await ChromeAPIWrapper.tabs.exists(tabId);
+
+            if (tabExists) {
                 const timeRemaining = alarm.scheduledTime - now;
                 const description = FormatDuration(timeRemaining);
                 
                 // Update badge text
                 await ChromeAPIWrapper.action.setBadgeText({ 
-                    'tabId': parseInt(alarm.name), 
+                    'tabId': tabId, 
                     'text': description
                 });
 
@@ -292,22 +329,12 @@ async function UpdateBadges() {
                 const secondsRemaining = Math.floor(timeRemaining / 1000);
                 const badgeColor = secondsRemaining <= 30 ? '#ff0000' : '#666666';
                 ChromeAPIWrapper.action.setBadgeBackgroundColor({ 
-                    'tabId': parseInt(alarm.name),
+                    'tabId': tabId,
                     'color': badgeColor 
                 });
-            } catch (error) {
-                if (error.message === 'Tab not found') {
-                    try {
-                        await ChromeAPIWrapper.alarms.clear(alarm.name);
-                        // Reset badge color for cleared alarm
-                        ChromeAPIWrapper.action.setBadgeBackgroundColor({ 
-                            'tabId': parseInt(alarm.name),
-                            'color': '#666666'
-                        });
-                    } catch (clearError) {
-                        console.error('Failed to clear orphaned alarm:', clearError);
-                    }
-                }
+            } else {
+                // If tab does not exist, clear the alarm
+                await ChromeAPIWrapper.alarms.clear(alarm.name);
             }
         }
     } catch (error) {
