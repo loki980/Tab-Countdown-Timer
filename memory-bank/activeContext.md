@@ -1,22 +1,23 @@
 # Active Context
 
 ## Current Work Focus
-Completed a comprehensive UI/UX overhaul of the popup based on an expert evaluation. The focus was on improving usability, state clarity, and fixing layout issues.
+The user has requested a full update of the memory bank to reflect the latest project state.
 
 ## Recent Changes
-- **UI Refinement:** Adjusted popup layout to eliminate scrollbars and improve visual balance.
-- **State Clarity:**
-    - The "Start timer" button is now disabled when the duration is zero.
-    - The button text changes to "Update timer" when a countdown is active.
-    - "Cancel" button was renamed to "Stop timer" for clarity.
-    - A distinct color is now used for the "Pause" button's paused state.
-- **Improved Ergonomics:** Implemented Shift + Mouse Wheel to adjust minute inputs by ±5 for faster timer setting.
-- **Code Quality:** Refactored `popup.js` to remove duplicated countdown logic into a single, unified function.
-- **Discoverability:** The YouTube-specific "Pause Video" action is now presented more clearly within a titled fieldset.
+- **Release Script:** `release.sh` was updated to exclude `*.zip` files from new release packages.
+- **UI/UX Enhancements:** 
+    - The popup UI now allows for more flexible minute and hour inputs, including handling overflow and underflow gracefully.
+    - Keyboard arrow keys can be used to increment/decrement timer values.
+    - The mouse wheel can be used to adjust timer values, with `Shift` key accelerating changes for minutes.
+- **Code Quality & Bug Fixes:**
+    - Added extensive commenting to the `ChromeAPIWrapper` in `background.js` for better clarity.
+    - The background script now verifies that a tab exists before attempting to close it, preventing errors.
+    - The feature that automatically set a 10 PM timer for YouTube tabs has been completely removed.
+- **Version Bumps:** The manifest version has been updated to 1.3.1.
 
 ## Next Steps
-With the UI overhaul complete, the next focus is to validate that no regressions were introduced and confirm the extension is stable.
+The memory bank is being updated to accurately reflect the current state of the project.
 
 ## Active Decisions and Considerations
-- The UI evaluation highlighted several accessibility opportunities (like `aria-live` for countdowns), which were deferred for now to focus on layout and core usability.
-- The decision was made to keep the separate Hours and Minutes inputs but enhance them with keyboard/mouse shortcuts, rather than moving to a single duration field.
+- The decision to remove the 10 PM auto-timer for YouTube simplifies the extension's logic and gives users more direct control.
+- The UI enhancements focus on improving the speed and ease of setting custom timers.
