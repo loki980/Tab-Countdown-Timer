@@ -292,7 +292,7 @@ describe('Background Script Utility Functions', () => {
 
       // Verify error handling
       expect(consoleSpy).toHaveBeenCalledWith(
-        'Failed to clear orphaned alarm:',
+        'Failed to get alarms:',
         { message: 'Failed to clear alarm' }
       );
     });

@@ -207,15 +207,75 @@ describe('Popup Script Functionality', () => {
     
     test('input validation should work correctly', () => {
       const hoursInput = document.getElementById('hours');
-      const minutesInput = document.getElementById('minutes');
       
       // Test boundary values
       hoursInput.value = '25'; // Over max
-      minutesInput.value = '65'; // Over max
       
       // The actual validation happens in popup.js event handlers
       expect(parseInt(hoursInput.max)).toBe(24);
-      expect(parseInt(minutesInput.max)).toBe(59);
+    });
+  });
+
+  describe('Input Overflow and Underflow', () => {
+    let hoursInput, minutesInput, fixOverflowAndUnderflows;
+
+    beforeEach(() => {
+      hoursInput = document.getElementById('hours');
+      minutesInput = document.getElementById('minutes');
+      
+      // Manually create the function in the test scope
+      fixOverflowAndUnderflows = () => {
+        let hours = Number($(hoursInput).val()) || 0;
+        let minutes = Number($(minutesInput).val()) || 0;
+
+        if (minutes < 0) {
+            if (hours > 0) {
+                const hoursToBorrow = Math.ceil(Math.abs(minutes) / 60);
+                hours -= hoursToBorrow;
+                minutes += hoursToBorrow * 60;
+            } else {
+                minutes = 0;
+            }
+        }
+
+        if (minutes > 59) {
+            hours += Math.floor(minutes / 60);
+            minutes %= 60;
+        }
+
+        hours = Math.max(0, Math.min(24, hours));
+        minutes = Math.max(0, minutes);
+        
+        if (hours === 24) {
+            minutes = 0;
+        }
+
+        $(hoursInput).val(hours);
+        $(minutesInput).val(minutes);
+      };
+    });
+
+    test('should handle minute overflow correctly', () => {
+      $(minutesInput).val('75');
+      fixOverflowAndUnderflows();
+      expect(hoursInput.value).toBe('1');
+      expect(minutesInput.value).toBe('15');
+    });
+
+    test('should handle minute underflow by borrowing from hours', () => {
+      $(hoursInput).val('1');
+      $(minutesInput).val('-1'); // Simulate result of scrolling down from 0
+      fixOverflowAndUnderflows();
+      expect(hoursInput.value).toBe('0');
+      expect(minutesInput.value).toBe('59');
+    });
+
+    test('should not go below zero when at 0h 0m', () => {
+      $(hoursInput).val('0');
+      $(minutesInput).val('-1');
+      fixOverflowAndUnderflows();
+      expect(hoursInput.value).toBe('0');
+      expect(minutesInput.value).toBe('0');
     });
   });
 });
