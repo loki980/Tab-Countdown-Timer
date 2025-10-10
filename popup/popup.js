@@ -34,21 +34,37 @@ $(document).ready(function () {
 
     // Address invalid timers and manage overflow between minutes/hours
     function fixOverflowAndUnderflows() {
-        // Validate hours
-        let hours = Number($hours[0].value);
-        hours = isNaN(hours) ? 0 : Math.max(0, Math.min(24, hours));
-        $hours[0].value = hours;
+        let hours = Number($hours.val()) || 0;
+        let minutes = Number($minutes.val()) || 0;
 
-        // Validate minutes
-        let minutes = Number($minutes[0].value);
-        minutes = isNaN(minutes) ? 0 : Math.max(0, Math.min(59, minutes));
-        $minutes[0].value = minutes;
-
-        // 61 minutes -> 1 hour, 1 minute
-        if (minutes > 59) {
-            $minutes[0].value = minutes % 60;
-            $hours[0].value = Math.min(24, hours + Math.floor(minutes / 60));
+        // Handle negative minutes by borrowing from hours
+        if (minutes < 0) {
+            if (hours > 0) {
+                const hoursToBorrow = Math.ceil(Math.abs(minutes) / 60);
+                hours -= hoursToBorrow;
+                minutes += hoursToBorrow * 60;
+            } else {
+                minutes = 0; // Can't go below zero
+            }
         }
+
+        // Handle minute overflow
+        if (minutes > 59) {
+            hours += Math.floor(minutes / 60);
+            minutes %= 60;
+        }
+
+        // Ensure hours and minutes are not negative and cap hours at 24
+        hours = Math.max(0, Math.min(24, hours));
+        minutes = Math.max(0, minutes);
+
+        // If hours is 24, minutes must be 0
+        if (hours === 24) {
+            minutes = 0;
+        }
+        
+        $hours.val(hours);
+        $minutes.val(minutes);
     }
 
     function getCloseTimeInSeconds() {
@@ -287,7 +303,6 @@ $(document).ready(function () {
             this.value = Number(this.value) - 1;
             e.preventDefault();
         }
-        fixOverflowAndUnderflows();
         updateStartButtonState();
     });
 
@@ -309,6 +324,11 @@ $(document).ready(function () {
     // Prevent non-numeric input and keep gating in sync
     $("#hours, #minutes").on('input', function () {
         this.value = this.value.replace(/[^0-9]/g, '');
+        updateStartButtonState();
+    });
+
+    // Handle blur
+    $("#hours, #minutes").on('blur', function () {
         fixOverflowAndUnderflows();
         updateStartButtonState();
     });
