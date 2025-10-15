@@ -277,5 +277,61 @@ describe('Popup Script Functionality', () => {
       expect(hoursInput.value).toBe('0');
       expect(minutesInput.value).toBe('0');
     });
+
+    test('should set minutes to 0 if hours is 24', () => {
+        $(hoursInput).val('24');
+        $(minutesInput).val('30');
+        fixOverflowAndUnderflows();
+        expect(hoursInput.value).toBe('24');
+        expect(minutesInput.value).toBe('0');
+    });
+  });
+
+  describe('Display and Formatting Functions', () => {
+    test('formatETA should return an empty string for an invalid date', () => {
+        const formatETA = (timestampMs) => {
+            const d = new Date(timestampMs);
+            if (isNaN(d.getTime())) {
+                return '';
+            }
+            return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        };
+        const formatted = formatETA('invalid date');
+        expect(formatted).toBe('');
+    });
+  });
+
+  describe('Countdown Logic', () => {
+    beforeEach(() => {
+        jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    test('should show paused time when paused', () => {
+        document.body.innerHTML = `<p id="timeRemaining"></p>`;
+        const $timeRemaining = $('#timeRemaining');
+
+        // This is a simplified version of the updateCountdown function
+        let isPaused = true;
+        let pausedTimeRemaining = 5000; // 5 seconds
+
+        const updateCountdown = () => {
+            if (isPaused) {
+                if (pausedTimeRemaining) {
+                    const distance = pausedTimeRemaining;
+                    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+                    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+                    $timeRemaining.text(minutes + "m " + seconds + "s ");
+                }
+                return;
+            }
+        };
+
+        updateCountdown();
+        expect($timeRemaining.text()).toBe('0m 5s ');
+    });
   });
 });

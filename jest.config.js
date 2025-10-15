@@ -16,6 +16,12 @@ module.exports = {
       functions: 55,
       lines: 40,
       statements: 40
+    },
+    './popup/popup.js': {
+      branches: 30,
+      functions: 50,
+      lines: 40,
+      statements: 40
     }
   },
   testTimeout: 10000
