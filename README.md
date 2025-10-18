@@ -157,11 +157,11 @@ See `memory-bank/progress.md` for full status.
 4. Push: `git push origin feature/amazing-feature`.
 5. Open a Pull Request.
 
-Review `CLAUDE.md` for guidelines. Update `memory-bank/` docs for new patterns.
+Update `memory-bank/` docs for new patterns.
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) (add if missing) for details.
+MIT License. See [LICENSE](LICENSE) for details.
 
 ---
 
