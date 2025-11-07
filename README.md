@@ -54,9 +54,7 @@ Follow the prompts to add the extension.
 
 ```
 Tab-Countdown-Timer/
-├── .clinerules              # Cline AI rules for project intelligence
 ├── .gitignore               # Git ignores
-├── CLAUDE.md                # Contributor guidelines?
 ├── jest.config.js           # Jest configuration
 ├── jest.setup.js            # Jest setup with mocks
 ├── manifest.json            # Extension manifest (v3)
@@ -73,13 +71,6 @@ Tab-Countdown-Timer/
 │   └── hourglass512.png     # 512x512
 ├── lib/                     # Shared libraries
 │   └── jquery-3.5.1.min.js  # jQuery for UI
-├── memory-bank/             # Documentation (Cline memory)
-│   ├── activeContext.md     # Current work/next steps
-│   ├── productContext.md    # Product goals/user experience
-│   ├── progress.md          # Status/known issues
-│   ├── projectbrief.md      # Core requirements
-│   ├── systemPatterns.md    # Architecture overview
-│   └── techContext.md       # Tech stack/constraints
 ├── popup/                   # Popup UI
 │   ├── popup.html           # HTML structure
 │   ├── popup.js             # UI logic (inputs, timers, Chrome API calls)
@@ -147,8 +138,6 @@ Current coverage: Core utilities (e.g., `FormatDuration`), alarm handling, YouTu
 - Added comments to ChromeAPIWrapper.
 - Version bump in manifest.
 
-See `memory-bank/progress.md` for full status.
-
 ## Contributing
 
 1. Fork and clone the repo.
@@ -156,8 +145,6 @@ See `memory-bank/progress.md` for full status.
 3. Commit changes: `git commit -m 'Add amazing feature'`.
 4. Push: `git push origin feature/amazing-feature`.
 5. Open a Pull Request.
-
-Update `memory-bank/` docs for new patterns.
 
 ## License
 
