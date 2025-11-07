@@ -149,6 +149,60 @@ describe('Popup Script Functionality', () => {
         }
       }, 100);
     });
+
+    test('should initialize YouTube action options and persist selection', (done) => {
+      const tabId = 456;
+      let storedValues = {};
+
+      chrome.tabs.query.mockImplementation((query, callback) => {
+        callback([{ id: tabId, url: 'https://www.youtube.com/watch?v=abc' }]);
+      });
+
+      chrome.storage.local.get.mockImplementation((keys, callback) => {
+        const result = {};
+        const keysArr = Array.isArray(keys) ? keys : [keys];
+        keysArr.forEach(key => {
+          if (key.endsWith('_action') && storedValues[key]) {
+            result[key] = storedValues[key];
+          }
+        });
+        callback(result);
+      });
+
+      chrome.storage.local.set.mockImplementation((items, callback) => {
+        storedValues = { ...storedValues, ...items };
+        if (callback) callback();
+        return Promise.resolve();
+      });
+
+      delete require.cache[require.resolve('../popup/popup.js')];
+      
+      // Manually inject and execute the script
+      const scriptContent = require('fs').readFileSync('popup/popup.js', 'utf8');
+      const scriptEl = document.createElement('script');
+      scriptEl.textContent = scriptContent;
+      document.body.appendChild(scriptEl);
+
+      setTimeout(() => {
+        const actionOptions = $('.action-options');
+        expect(actionOptions.css('display')).toBe('block');
+
+        const pauseRadio = $('input[name="timerAction"][value="pause"]');
+        expect(pauseRadio.prop('checked')).toBe(true);
+        expect(pauseRadio.prop('disabled')).toBe(false);
+
+        const closeRadio = $('input[name="timerAction"][value="close"]');
+        closeRadio.prop('checked', true).trigger('change');
+
+        setTimeout(() => {
+          expect(chrome.storage.local.set).toHaveBeenCalledWith({
+            [`${tabId}_action`]: 'close'
+          });
+          expect(storedValues[`${tabId}_action`]).toBe('close');
+          done();
+        }, 100);
+      }, 100);
+    });
     
     test('should handle YouTube tab detection', () => {
       // Test that YouTube URL detection logic works
