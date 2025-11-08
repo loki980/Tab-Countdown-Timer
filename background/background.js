@@ -278,7 +278,7 @@ ChromeAPIWrapper.alarms.onAlarm.addListener(async function(alarm) {
 });
 
 // When the user closes a tab, clear the associated alarm
-function HandleRemove(tabId, removeInfo) {
+function HandleRemove(tabId, _removeInfo) {
   ChromeAPIWrapper.alarms.clear(tabId.toString())
     .then(() => {
       // Reset badge color when alarm is cleared

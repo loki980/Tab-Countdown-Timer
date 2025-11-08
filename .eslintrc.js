@@ -13,8 +13,8 @@ module.exports = {
     sourceType: 'module'
   },
   rules: {
-    'no-console': 'warn',
-    'no-unused-vars': 'warn',
+    'no-console': 'off',
+    'no-unused-vars': ['warn', { 'argsIgnorePattern': '^_' }],
     'prefer-const': 'warn',
     'no-var': 'warn',
     'no-undef': 'error',
