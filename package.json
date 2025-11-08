@@ -7,7 +7,13 @@
     "lib": "lib"
   },
   "scripts": {
-    "test": "jest"
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint . --ext .js",
+    "lint:fix": "eslint . --ext .js --fix",
+    "validate": "node scripts/validate-manifest.js",
+    "build": "node scripts/build-extension.js",
+    "security-audit": "npm audit --audit-level=moderate"
   },
   "repository": {
     "type": "git",
@@ -22,6 +28,8 @@
   "homepage": "https://github.com/loki980/Tab-Countdown-Timer#readme",
   "devDependencies": {
     "jest": "^27.5.1",
-    "jest-chrome": "^0.8.0"
+    "jest-chrome": "^0.8.0",
+    "eslint": "^8.57.0",
+    "npm-check-updates": "^16.14.11"
   }
 }
