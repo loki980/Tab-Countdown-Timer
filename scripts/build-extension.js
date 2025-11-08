@@ -11,48 +11,48 @@ const { execSync } = require('child_process');
 
 function buildExtension() {
   console.log('🏗️  Building Tab Countdown Timer extension...');
-  
+
   try {
     // Get version from manifest
     const manifestPath = path.join(__dirname, '..', 'manifest.json');
     const manifestContent = fs.readFileSync(manifestPath, 'utf8');
     const manifest = JSON.parse(manifestContent);
     const version = manifest.version;
-    
+
     console.log(`📦 Building version ${version}...`);
-    
+
     // Create dist directory
     const distDir = path.join(__dirname, '..', 'dist');
     if (!fs.existsSync(distDir)) {
       fs.mkdirSync(distDir, { recursive: true });
     }
-    
+
     // Clean previous builds
     const zipFileName = `TabCountdownTimer_${version}.zip`;
     const zipPath = path.join(__dirname, '..', zipFileName);
-    
+
     if (fs.existsSync(zipPath)) {
       fs.unlinkSync(zipPath);
       console.log(`🗑️  Removed previous build: ${zipFileName}`);
     }
-    
+
     // Run the existing release script to create ZIP
     console.log('📋 Creating extension package...');
-    execSync(`./release.sh`, { stdio: 'inherit', cwd: path.join(__dirname, '..') });
-    
+    execSync('./release.sh', { stdio: 'inherit', cwd: path.join(__dirname, '..') });
+
     // Verify the ZIP was created
     if (!fs.existsSync(zipPath)) {
       throw new Error(`Build failed: ${zipFileName} was not created`);
     }
-    
+
     // Get file stats
     const stats = fs.statSync(zipPath);
     const fileSizeKB = Math.round(stats.size / 1024);
-    
-    console.log(`✅ Build completed successfully!`);
+
+    console.log('✅ Build completed successfully!');
     console.log(`📁 Package: ${zipFileName}`);
     console.log(`📏 Size: ${fileSizeKB} KB`);
-    
+
     // Create build info file
     const buildInfo = {
       version: version,
@@ -61,18 +61,18 @@ function buildExtension() {
       fileName: zipFileName,
       manifest: manifest
     };
-    
+
     const buildInfoPath = path.join(distDir, `build-info-${version}.json`);
     fs.writeFileSync(buildInfoPath, JSON.stringify(buildInfo, null, 2));
     console.log(`📄 Build info saved: build-info-${version}.json`);
-    
+
     // Validate package contents
     console.log('🔍 Validating package contents...');
     validatePackage(zipPath, manifest);
-    
+
     console.log('\n🎉 Extension build completed successfully!');
     console.log(`📍 Location: ${zipPath}`);
-    
+
   } catch (error) {
     console.error(`❌ Build failed: ${error.message}`);
     process.exit(1);
@@ -85,7 +85,7 @@ function validatePackage(zipPath, manifest) {
   // 2. Check file sizes are reasonable
   // 3. Validate manifest syntax again
   // 4. Check for any prohibited content
-  
+
   const requiredFiles = [
     'manifest.json',
     'background/background.js',
@@ -93,18 +93,18 @@ function validatePackage(zipPath, manifest) {
     'popup/popup.js',
     'popup/styles.css'
   ];
-  
+
   console.log(`✅ Package validation passed for ${requiredFiles.length} required files`);
-  
+
   // Check file size limits (Chrome Web Store has limits)
   const stats = fs.statSync(zipPath);
   const maxSizeMB = 128; // Chrome Web Store limit
   const fileSizeMB = stats.size / (1024 * 1024);
-  
+
   if (fileSizeMB > maxSizeMB) {
     throw new Error(`Package size ${fileSizeMB.toFixed(2)}MB exceeds limit of ${maxSizeMB}MB`);
   }
-  
+
   console.log(`✅ Package size ${fileSizeMB.toFixed(2)}MB is within limits`);
 }
 

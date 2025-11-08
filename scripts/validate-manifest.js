@@ -10,13 +10,13 @@ const path = require('path');
 
 function validateManifest() {
   const manifestPath = path.join(__dirname, '..', 'manifest.json');
-  
+
   try {
     const manifestContent = fs.readFileSync(manifestPath, 'utf8');
     const manifest = JSON.parse(manifestContent);
-    
+
     console.log('🔍 Validating manifest.json...');
-    
+
     // Check required fields
     const requiredFields = [
       'name',
@@ -24,9 +24,9 @@ function validateManifest() {
       'manifest_version',
       'description'
     ];
-    
+
     let hasErrors = false;
-    
+
     for (const field of requiredFields) {
       if (!manifest[field]) {
         console.error(`❌ Missing required field: ${field}`);
@@ -35,7 +35,7 @@ function validateManifest() {
         console.log(`✅ Found required field: ${field}`);
       }
     }
-    
+
     // Validate manifest version
     if (manifest.manifest_version !== 3) {
       console.error(`❌ Invalid manifest_version: ${manifest.manifest_version}. Expected: 3`);
@@ -43,7 +43,7 @@ function validateManifest() {
     } else {
       console.log(`✅ Valid manifest_version: ${manifest.manifest_version}`);
     }
-    
+
     // Validate version format (semver)
     const versionRegex = /^\d+\.\d+\.\d+$/;
     if (!versionRegex.test(manifest.version)) {
@@ -52,7 +52,7 @@ function validateManifest() {
     } else {
       console.log(`✅ Valid version format: ${manifest.version}`);
     }
-    
+
     // Validate icons if present
     if (manifest.icons) {
       const requiredSizes = [16, 32, 48, 128];
@@ -70,7 +70,7 @@ function validateManifest() {
         }
       }
     }
-    
+
     // Validate action/popup
     if (manifest.action && manifest.action.default_popup) {
       const popupPath = path.join(__dirname, '..', manifest.action.default_popup);
@@ -81,7 +81,7 @@ function validateManifest() {
         console.log(`✅ Found popup file: ${manifest.action.default_popup}`);
       }
     }
-    
+
     // Validate background script
     if (manifest.background && manifest.background.service_worker) {
       const backgroundPath = path.join(__dirname, '..', manifest.background.service_worker);
@@ -92,7 +92,7 @@ function validateManifest() {
         console.log(`✅ Found background script: ${manifest.background.service_worker}`);
       }
     }
-    
+
     // Validate permissions
     if (manifest.permissions) {
       const validPermissions = [
@@ -104,7 +104,7 @@ function validateManifest() {
         'unlimitedStorage',
         'background'
       ];
-      
+
       for (const permission of manifest.permissions) {
         if (!validPermissions.includes(permission)) {
           console.warn(`⚠️  Potentially unused permission: ${permission}`);
@@ -112,15 +112,15 @@ function validateManifest() {
       }
       console.log(`✅ Validated ${manifest.permissions.length} permissions`);
     }
-    
+
     if (hasErrors) {
       console.error('\n❌ Manifest validation failed!');
       process.exit(1);
     }
-    
+
     console.log('\n✅ Manifest validation passed!');
     console.log(`📦 Extension: ${manifest.name} v${manifest.version}`);
-    
+
   } catch (error) {
     console.error(`❌ Error reading manifest: ${error.message}`);
     process.exit(1);
