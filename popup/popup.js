@@ -156,8 +156,12 @@ const initPopup = function() {
     updateCountdown();
     window.countdownInterval = setInterval(updateCountdown, 1000);
 
-    // Update ETA
-    $eta.text(countDownDate ? ('Ends at ' + formatETA(countDownDate)) : '');
+    // Update ETA only if countdown is in the future
+    if (countDownDate && countDownDate > Date.now()) {
+      $eta.text('Ends at ' + formatETA(countDownDate));
+    } else {
+      $eta.text('');
+    }
 
     // Handle pause button
     $pause.off('click').on('click', async function() {

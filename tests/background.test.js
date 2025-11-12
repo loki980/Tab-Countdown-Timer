@@ -9,6 +9,8 @@ const {
   checkAndSetYouTubeTimers
 } = require('../background/background.js');
 
+const alarmListeners = chrome.alarms.onAlarm.addListener.mock.calls.map(call => call[0]);
+
 /**
  * Test suite for background script utility functions
  * Tests both the FormatDuration utility and ChromeAPIWrapper functionality
@@ -313,6 +315,25 @@ describe('Background Script Utility Functions', () => {
         expect.any(Object)
       );
     });
+
+    test('clears alarms when the tab no longer exists', async() => {
+      const mockAlarms = [{
+        name: '999',
+        scheduledTime: Date.now() + 1000
+      }];
+
+      chrome.alarms.getAll.mockImplementation(callback => callback(mockAlarms));
+      const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockResolvedValue(false);
+      const clearSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'clear').mockResolvedValue(true);
+
+      await UpdateBadges();
+
+      expect(existsSpy).toHaveBeenCalledWith(999);
+      expect(clearSpy).toHaveBeenCalledWith('999');
+
+      existsSpy.mockRestore();
+      clearSpy.mockRestore();
+    });
   });
 
   /**
@@ -478,6 +499,95 @@ describe('Background Script Utility Functions', () => {
 
       const result = getCloseTimeInSeconds();
       expect(result).toBe(5401); // 1 hour + 30 minutes + 1 second
+    });
+  });
+
+  describe('Alarm listener behavior', () => {
+    const primaryAlarmHandler = alarmListeners[0];
+
+    test('clears alarms when the tab is gone', async() => {
+      const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockResolvedValue(false);
+      const clearSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'clear').mockResolvedValue(true);
+      const getSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'get');
+
+      await primaryAlarmHandler({ name: '55' });
+
+      expect(clearSpy).toHaveBeenCalledWith('55');
+      expect(getSpy).not.toHaveBeenCalled();
+
+      existsSpy.mockRestore();
+      clearSpy.mockRestore();
+      getSpy.mockRestore();
+    });
+
+    test('pauses YouTube tabs when action is pause', async() => {
+      const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockResolvedValue(true);
+      const getSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'get').mockResolvedValue({
+        id: 101,
+        url: 'https://www.youtube.com/watch?v=alarm'
+      });
+      const storageSpy = jest.spyOn(ChromeAPIWrapper.storage.local, 'get')
+        .mockResolvedValue({ '101_action': 'pause' });
+      const executeSpy = jest.spyOn(ChromeAPIWrapper.scripting, 'executeScript').mockResolvedValue([]);
+      const removeSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'remove').mockResolvedValue();
+
+      await primaryAlarmHandler({ name: '101' });
+
+      expect(executeSpy).toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
+
+      existsSpy.mockRestore();
+      getSpy.mockRestore();
+      storageSpy.mockRestore();
+      executeSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
+
+    test('closes non-YouTube tabs when pause is not selected', async() => {
+      const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockResolvedValue(true);
+      const getSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'get').mockResolvedValue({
+        id: 77,
+        url: 'https://example.com'
+      });
+      const storageSpy = jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({});
+      const removeSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'remove').mockResolvedValue();
+
+      await primaryAlarmHandler({ name: '77' });
+
+      expect(removeSpy).toHaveBeenCalledWith(77);
+
+      existsSpy.mockRestore();
+      getSpy.mockRestore();
+      storageSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
+  });
+
+  describe('ChromeAPIWrapper without chrome runtime', () => {
+    let originalChrome;
+
+    beforeAll(() => {
+      originalChrome = global.chrome;
+      // Remove chrome so wrapper takes the fallback branches
+      delete global.chrome;
+    });
+
+    afterAll(() => {
+      global.chrome = originalChrome;
+    });
+
+    test('alarms.getAll resolves to an empty array', async() => {
+      await expect(ChromeAPIWrapper.alarms.getAll()).resolves.toEqual([]);
+    });
+
+    test('storage.local.get resolves to an empty object', async() => {
+      await expect(ChromeAPIWrapper.storage.local.get('foo')).resolves.toEqual({});
+    });
+
+    test('scripting.executeScript rejects when API is unavailable', async() => {
+      await expect(
+        ChromeAPIWrapper.scripting.executeScript({})
+      ).rejects.toThrow('Scripting API not available');
     });
   });
 });

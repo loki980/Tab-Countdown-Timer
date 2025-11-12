@@ -193,4 +193,131 @@ describe('popup.js integration coverage', () => {
     expect($('#eta').text()).toBe('');
     expect($('#pausebutton').text()).toBe('Pause');
   });
+
+  test('blur fixes negative inputs, borrows hours, and caps overflow', async() => {
+    await loadPopup();
+
+    $('#hours').val('1');
+    $('#minutes').val('-30').triggerHandler('blur');
+    expect($('#hours').val()).toBe('0');
+    expect($('#minutes').val()).toBe('30');
+
+    $('#hours').val('0');
+    $('#minutes').val('-5').triggerHandler('blur');
+    expect($('#minutes').val()).toBe('0');
+
+    $('#hours').val('0');
+    $('#minutes').val('125').triggerHandler('blur');
+    expect($('#hours').val()).toBe('2');
+    expect($('#minutes').val()).toBe('5');
+  });
+
+  test('setupCountdown clears prior interval and warns about imminent expiry', async() => {
+    const clearSpy = jest.spyOn(global, 'clearInterval');
+
+    window.countdownInterval = setInterval(() => {}, 1000);
+    const existingInterval = window.countdownInterval;
+
+    await loadPopup({ alarm: { scheduledTime: Date.now() + 20000 } });
+
+    expect(clearSpy).toHaveBeenCalledWith(existingInterval);
+    expect($('#timeRemaining').hasClass('warning')).toBe(true);
+
+    clearInterval(existingInterval);
+    clearInterval(window.countdownInterval);
+    clearSpy.mockRestore();
+  });
+
+  test('expired countdown displays EXPIRED message immediately', async() => {
+    await loadPopup({ alarm: { scheduledTime: Date.now() - 5000 } });
+    expect($('#timeRemaining').text()).toBe('EXPIRED');
+    expect($('#eta').text()).toBe('');
+  });
+
+  test('YouTube tabs reveal action options, default to pause, and persist selection', async() => {
+    const { tab } = await loadPopup({
+      url: 'https://www.youtube.com/watch?v=abc123'
+    });
+
+    expect($('.action-options').css('display')).toBe('block');
+    expect($('#pauseVideo').prop('disabled')).toBe(false);
+    expect($('input[name="timerAction"]:checked').val()).toBe('pause');
+
+    $('input[name="timerAction"][value="close"]')
+      .prop('checked', true)
+      .trigger('change');
+
+    expect(chrome.storage.local.set).toHaveBeenLastCalledWith({
+      [`${tab.id}_action`]: 'close'
+    });
+  });
+
+  test('YouTube tabs restore a previously saved action', async() => {
+    await loadPopup({
+      url: 'https://www.youtube.com/watch?v=xyz',
+      storedAction: 'close'
+    });
+
+    expect($('input[name="timerAction"]:checked').val()).toBe('close');
+  });
+
+  test('start button stores the selected YouTube action', async() => {
+    const { tab, getPersisted } = await loadPopup({
+      url: 'https://www.youtube.com/watch?v=timer',
+      storedMinutes: 0
+    });
+
+    $('#minutes').val('2').trigger('input');
+    $('input[name="timerAction"][value="pause"]').prop('checked', true);
+
+    $('#startbutton').trigger('click');
+    await flushPromises();
+
+    const saved = getPersisted();
+    expect(saved[`${tab.id}_action`]).toBe('pause');
+  });
+
+  test('preset buttons update hours/minutes even when dataset fields are missing', async() => {
+    await loadPopup();
+
+    $('.preset-btn[data-minutes="15"]').trigger('click');
+    expect($('#minutes').val()).toBe('15');
+    expect($('#hours').val()).toBe('0');
+
+    $('.preset-btn[data-hours="1"]').trigger('click');
+    expect($('#hours').val()).toBe('1');
+    expect($('#minutes').val()).toBe('0');
+  });
+
+  test('keyboard and wheel interactions adjust inputs with proper modifiers', async() => {
+    await loadPopup();
+
+    const minutesInput = document.getElementById('minutes');
+    minutesInput.value = '1';
+
+    const arrowUpEvent = $.Event('keydown', { key: 'ArrowUp' });
+    $('#minutes').trigger(arrowUpEvent);
+    expect(minutesInput.value).toBe('2');
+    expect(arrowUpEvent.isDefaultPrevented()).toBe(true);
+
+    const arrowDownEvent = $.Event('keydown', { key: 'ArrowDown' });
+    $('#minutes').trigger(arrowDownEvent);
+    expect(minutesInput.value).toBe('1');
+    expect(arrowDownEvent.isDefaultPrevented()).toBe(true);
+
+    minutesInput.value = '0';
+    const wheelMinutes = $.Event('wheel');
+    wheelMinutes.originalEvent = { deltaY: -1, preventDefault: jest.fn() };
+    wheelMinutes.shiftKey = true;
+    $('#minutes').trigger(wheelMinutes);
+    expect(minutesInput.value).toBe('5');
+    expect(wheelMinutes.isDefaultPrevented()).toBe(true);
+
+    const hoursInput = document.getElementById('hours');
+    hoursInput.value = '1';
+    const wheelHours = $.Event('wheel');
+    wheelHours.originalEvent = { deltaY: 5, preventDefault: jest.fn() };
+    $('#hours').trigger(wheelHours);
+    expect(hoursInput.value).toBe('0');
+  });
 });
