@@ -3,8 +3,6 @@ const $ = require('../lib/jquery-3.5.1.min.js');
 global.$ = global.jQuery = $;
 
 // Chrome API mocks are set up in chrome-mocks.js
-// Import after mocks are established
-const { ChromeAPIWrapper } = require('../background/background.js');
 
 /**
  * Test suite for popup script functionality
@@ -101,8 +99,6 @@ describe('Popup Script Functionality', () => {
     test('preset buttons should update input values', () => {
       const preset5m = document.querySelector('[data-minutes="5"]');
       const preset1h = document.querySelector('[data-hours="1"]');
-      const hoursInput = document.getElementById('hours');
-      const minutesInput = document.getElementById('minutes');
 
       // Simulate clicking 5 minute preset
       $(preset5m).trigger('click');
@@ -218,7 +214,7 @@ describe('Popup Script Functionality', () => {
         callback([{ id: 123, url: 'https://example.com' }]);
       });
 
-      chrome.alarms.create.mockImplementation((name, info) => {
+      chrome.alarms.create.mockImplementation((_name, _info) => {
         return Promise.resolve();
       });
 

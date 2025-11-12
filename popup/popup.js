@@ -7,6 +7,21 @@ if (typeof require !== 'undefined') {
   ChromeAPIWrapper = chrome;
 }
 
+// Provide a chrome fallback when running outside the extension runtime
+if (typeof chrome === 'undefined' && ChromeAPIWrapper) {
+  const globalScope =
+    typeof globalThis !== 'undefined'
+      ? globalThis
+      : typeof window !== 'undefined'
+        ? window
+        : typeof global !== 'undefined'
+          ? global
+          : null;
+  if (globalScope) {
+    globalScope.chrome = ChromeAPIWrapper;
+  }
+}
+
 $(document).ready(function() {
   // Hide the cancel timer div and action options by default
   $('#cancelDiv').hide();
@@ -231,6 +246,8 @@ $(document).ready(function() {
 
   // Create/update tab countdown timer when the user sets one
   $('#startbutton').on('click', async function(e) {
+    e.preventDefault();
+
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const tabIdStr = tabs[0].id.toString();
@@ -272,7 +289,7 @@ $(document).ready(function() {
   });
 
   // If the user cancels the timer, clear the alarm and the badge
-  $('#cancelbutton').on('click', async function(e) {
+  $cancel.on('click', async function() {
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const tabId = parseInt(tabs[0].id);

@@ -68,7 +68,7 @@ function buildExtension() {
 
     // Validate package contents
     console.log('🔍 Validating package contents...');
-    validatePackage(zipPath, manifest);
+    validatePackage(zipPath);
 
     console.log('\n🎉 Extension build completed successfully!');
     console.log(`📍 Location: ${zipPath}`);
@@ -79,7 +79,7 @@ function buildExtension() {
   }
 }
 
-function validatePackage(zipPath, manifest) {
+function validatePackage(zipPath) {
   // Basic validation - in a real scenario, you might want to:
   // 1. Extract ZIP and verify all required files are present
   // 2. Check file sizes are reasonable
