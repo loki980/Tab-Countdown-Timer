@@ -23,7 +23,9 @@ jobs:
       
       - name: Get version from manifest
         id: get_version
-        run: echo "version=$(grep -Po '(?<=\"version\": \")[^\"]*' manifest.json)" >> $GITHUB_OUTPUT
+        run: |
+          VERSION=$(grep -Po '(?<="version": ")[^"]*' manifest.json)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         
       - name: Validate version consistency
         run: |
