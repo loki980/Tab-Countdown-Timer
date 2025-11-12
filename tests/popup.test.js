@@ -3,8 +3,6 @@ const $ = require('../lib/jquery-3.5.1.min.js');
 global.$ = global.jQuery = $;
 
 // Chrome API mocks are set up in chrome-mocks.js
-// Import after mocks are established
-const { ChromeAPIWrapper } = require('../background/background.js');
 
 /**
  * Test suite for popup script functionality
@@ -53,16 +51,16 @@ describe('Popup Script Functionality', () => {
 
     // Reset all mock implementations
     jest.clearAllMocks();
-    
+
     // Setup default mock implementations
     chrome.tabs.query.mockImplementation((query, callback) => {
       callback([{ id: 123, url: 'https://example.com' }]);
     });
-    
+
     chrome.alarms.get.mockImplementation((id, callback) => {
       callback(null);
     });
-    
+
     chrome.storage.local.get.mockImplementation((keys, callback) => {
       const result = {};
       if (Array.isArray(keys)) {
@@ -92,26 +90,24 @@ describe('Popup Script Functionality', () => {
       expect(document.getElementById('hours')).not.toBeNull();
       expect(document.getElementById('minutes')).not.toBeNull();
       expect(document.getElementById('startbutton')).not.toBeNull();
-      
+
       // Check default values
       expect(document.getElementById('hours').value).toBe('0');
       expect(document.getElementById('minutes').value).toBe('30');
     });
-    
+
     test('preset buttons should update input values', () => {
       const preset5m = document.querySelector('[data-minutes="5"]');
       const preset1h = document.querySelector('[data-hours="1"]');
-      const hoursInput = document.getElementById('hours');
-      const minutesInput = document.getElementById('minutes');
-      
+
       // Simulate clicking 5 minute preset
       $(preset5m).trigger('click');
       // Note: The actual event handling happens in popup.js when loaded
-      
+
       expect(preset5m).not.toBeNull();
       expect(preset1h).not.toBeNull();
     });
-    
+
     test('action options should be hidden by default for non-YouTube tabs', () => {
       const actionOptions = document.querySelector('.action-options');
       expect(actionOptions.style.display).toBe('none');
@@ -176,7 +172,7 @@ describe('Popup Script Functionality', () => {
       });
 
       delete require.cache[require.resolve('../popup/popup.js')];
-      
+
       // Manually inject and execute the script
       const scriptContent = require('fs').readFileSync('popup/popup.js', 'utf8');
       const scriptEl = document.createElement('script');
@@ -203,49 +199,49 @@ describe('Popup Script Functionality', () => {
         }, 100);
       }, 100);
     });
-    
+
     test('should handle YouTube tab detection', () => {
       // Test that YouTube URL detection logic works
       const testUrl = 'https://youtube.com/watch?v=abc';
       expect(testUrl.includes('youtube.com/watch')).toBe(true);
-      
+
       const nonYouTubeUrl = 'https://example.com';
       expect(nonYouTubeUrl.includes('youtube.com/watch')).toBe(false);
     });
-    
-    test('should handle timer creation', async () => {
+
+    test('should handle timer creation', async() => {
       chrome.tabs.query.mockImplementation((query, callback) => {
         callback([{ id: 123, url: 'https://example.com' }]);
       });
-      
-      chrome.alarms.create.mockImplementation((name, info) => {
+
+      chrome.alarms.create.mockImplementation((_name, _info) => {
         return Promise.resolve();
       });
-      
+
       chrome.storage.local.set.mockImplementation((items, callback) => {
         if (callback) callback();
         return Promise.resolve();
       });
-      
+
       chrome.action.setBadgeBackgroundColor.mockImplementation(() => {
         return Promise.resolve();
       });
 
       delete require.cache[require.resolve('../popup/popup.js')];
       require('../popup/popup.js');
-      
+
       // Simulate clicking start button
       const startButton = document.getElementById('startbutton');
       expect(startButton).not.toBeNull();
     });
   });
-  
+
   describe('Utility Functions', () => {
     test('getCloseTimeInSeconds should calculate correctly', () => {
       // Set input values
       document.getElementById('hours').value = '1';
       document.getElementById('minutes').value = '30';
-      
+
       // Define the function as it exists in popup.js
       const getCloseTimeInSeconds = () => {
         let seconds = 0;
@@ -254,17 +250,17 @@ describe('Popup Script Functionality', () => {
         seconds++;
         return seconds;
       };
-      
+
       const result = getCloseTimeInSeconds();
       expect(result).toBe(5401); // 1 hour (3600) + 30 minutes (1800) + 1 second
     });
-    
+
     test('input validation should work correctly', () => {
       const hoursInput = document.getElementById('hours');
-      
+
       // Test boundary values
       hoursInput.value = '25'; // Over max
-      
+
       // The actual validation happens in popup.js event handlers
       expect(parseInt(hoursInput.max)).toBe(24);
     });
@@ -276,32 +272,32 @@ describe('Popup Script Functionality', () => {
     beforeEach(() => {
       hoursInput = document.getElementById('hours');
       minutesInput = document.getElementById('minutes');
-      
+
       // Manually create the function in the test scope
       fixOverflowAndUnderflows = () => {
         let hours = Number($(hoursInput).val()) || 0;
         let minutes = Number($(minutesInput).val()) || 0;
 
         if (minutes < 0) {
-            if (hours > 0) {
-                const hoursToBorrow = Math.ceil(Math.abs(minutes) / 60);
-                hours -= hoursToBorrow;
-                minutes += hoursToBorrow * 60;
-            } else {
-                minutes = 0;
-            }
+          if (hours > 0) {
+            const hoursToBorrow = Math.ceil(Math.abs(minutes) / 60);
+            hours -= hoursToBorrow;
+            minutes += hoursToBorrow * 60;
+          } else {
+            minutes = 0;
+          }
         }
 
         if (minutes > 59) {
-            hours += Math.floor(minutes / 60);
-            minutes %= 60;
+          hours += Math.floor(minutes / 60);
+          minutes %= 60;
         }
 
         hours = Math.max(0, Math.min(24, hours));
         minutes = Math.max(0, minutes);
-        
+
         if (hours === 24) {
-            minutes = 0;
+          minutes = 0;
         }
 
         $(hoursInput).val(hours);
@@ -333,59 +329,59 @@ describe('Popup Script Functionality', () => {
     });
 
     test('should set minutes to 0 if hours is 24', () => {
-        $(hoursInput).val('24');
-        $(minutesInput).val('30');
-        fixOverflowAndUnderflows();
-        expect(hoursInput.value).toBe('24');
-        expect(minutesInput.value).toBe('0');
+      $(hoursInput).val('24');
+      $(minutesInput).val('30');
+      fixOverflowAndUnderflows();
+      expect(hoursInput.value).toBe('24');
+      expect(minutesInput.value).toBe('0');
     });
   });
 
   describe('Display and Formatting Functions', () => {
     test('formatETA should return an empty string for an invalid date', () => {
-        const formatETA = (timestampMs) => {
-            const d = new Date(timestampMs);
-            if (isNaN(d.getTime())) {
-                return '';
-            }
-            return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-        };
-        const formatted = formatETA('invalid date');
-        expect(formatted).toBe('');
+      const formatETA = (timestampMs) => {
+        const d = new Date(timestampMs);
+        if (isNaN(d.getTime())) {
+          return '';
+        }
+        return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      };
+      const formatted = formatETA('invalid date');
+      expect(formatted).toBe('');
     });
   });
 
   describe('Countdown Logic', () => {
     beforeEach(() => {
-        jest.useFakeTimers();
+      jest.useFakeTimers();
     });
 
     afterEach(() => {
-        jest.useRealTimers();
+      jest.useRealTimers();
     });
 
     test('should show paused time when paused', () => {
-        document.body.innerHTML = `<p id="timeRemaining"></p>`;
-        const $timeRemaining = $('#timeRemaining');
+      document.body.innerHTML = '<p id="timeRemaining"></p>';
+      const $timeRemaining = $('#timeRemaining');
 
-        // This is a simplified version of the updateCountdown function
-        let isPaused = true;
-        let pausedTimeRemaining = 5000; // 5 seconds
+      // This is a simplified version of the updateCountdown function
+      const isPaused = true;
+      const pausedTimeRemaining = 5000; // 5 seconds
 
-        const updateCountdown = () => {
-            if (isPaused) {
-                if (pausedTimeRemaining) {
-                    const distance = pausedTimeRemaining;
-                    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-                    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-                    $timeRemaining.text(minutes + "m " + seconds + "s ");
-                }
-                return;
-            }
-        };
+      const updateCountdown = () => {
+        if (isPaused) {
+          if (pausedTimeRemaining) {
+            const distance = pausedTimeRemaining;
+            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+            $timeRemaining.text(minutes + 'm ' + seconds + 's ');
+          }
+          return;
+        }
+      };
 
-        updateCountdown();
-        expect($timeRemaining.text()).toBe('0m 5s ');
+      updateCountdown();
+      expect($timeRemaining.text()).toBe('0m 5s ');
     });
   });
 });

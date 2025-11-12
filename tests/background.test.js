@@ -1,8 +1,8 @@
 // Import the utility functions and ChromeAPIWrapper for testing
-const { 
-  FormatDuration, 
-  ChromeAPIWrapper, 
-  HandleRemove, 
+const {
+  FormatDuration,
+  ChromeAPIWrapper,
+  HandleRemove,
   UpdateBadges,
   getMillisecondsUntil10PM,
   setYouTubeTimer,
@@ -54,7 +54,7 @@ describe('Background Script Utility Functions', () => {
     beforeEach(() => {
       // Reset Chrome API mocks before each test
       jest.clearAllMocks();
-      
+
       global.chrome.alarms = {
         onAlarm: { addListener: jest.fn() },
         clear: jest.fn((name, callback) => callback(true)),
@@ -62,7 +62,7 @@ describe('Background Script Utility Functions', () => {
         create: jest.fn(),
         get: jest.fn((name, callback) => callback(null))
       };
-      
+
       global.chrome.tabs = {
         onRemoved: { addListener: jest.fn() },
         onCreated: { addListener: jest.fn() },
@@ -71,21 +71,21 @@ describe('Background Script Utility Functions', () => {
         get: jest.fn((tabId, callback) => callback({})),
         query: jest.fn((query, callback) => callback([]))
       };
-      
+
       global.chrome.storage = {
         local: {
           get: jest.fn((keys, callback) => callback({})),
           set: jest.fn((items, callback) => callback())
         }
       };
-      
+
       global.chrome.runtime = {
         lastError: null
       };
     });
 
     // Test that all ChromeAPIWrapper methods properly interact with Chrome APIs
-    test('ChromeAPIWrapper methods call corresponding Chrome APIs', async () => {
+    test('ChromeAPIWrapper methods call corresponding Chrome APIs', async() => {
       // Test alarm-related methods
       await ChromeAPIWrapper.alarms.clear('test');
       expect(chrome.alarms.clear).toHaveBeenCalledWith('test', expect.any(Function));
@@ -112,7 +112,7 @@ describe('Background Script Utility Functions', () => {
     });
 
     // Test error handling in setBadgeText
-    test('setBadgeText handles errors correctly', async () => {
+    test('setBadgeText handles errors correctly', async() => {
       chrome.action.setBadgeText = jest.fn((options, callback) => {
         chrome.runtime.lastError = { message: 'Error occurred' };
         callback();
@@ -124,13 +124,13 @@ describe('Background Script Utility Functions', () => {
     });
 
     // Test that getAll returns empty array when no alarms exist
-    test('getAll returns an empty array when there are no alarms', async () => {
+    test('getAll returns an empty array when there are no alarms', async() => {
       const alarms = await ChromeAPIWrapper.alarms.getAll();
       expect(alarms).toEqual([]);
     });
 
     // Test that remove resolves properly after removing a tab
-    test('remove resolves correctly when a tab is removed', async () => {
+    test('remove resolves correctly when a tab is removed', async() => {
       await expect(ChromeAPIWrapper.tabs.remove(123)).resolves.toBeUndefined();
     });
   });
@@ -145,7 +145,7 @@ describe('Background Script Utility Functions', () => {
       expect(chrome.alarms.clear).toHaveBeenCalledWith(tabId.toString(), expect.any(Function));
     });
 
-    test('handles errors when clearing alarm', async () => {
+    test('handles errors when clearing alarm', async() => {
       const tabId = 123;
       chrome.alarms.clear = jest.fn((name, callback) => {
         chrome.runtime.lastError = { message: 'Failed to clear alarm' };
@@ -161,9 +161,9 @@ describe('Background Script Utility Functions', () => {
    * Tests for badge text updates
    */
   describe('Badge Text Updates', () => {
-    test('updates badge text for valid tab', async () => {
+    test('updates badge text for valid tab', async() => {
       const alarm = { name: '123', scheduledTime: Date.now() + 60000 }; // 1 minute from now
-      
+
       // Setup mocks with proper callback handling
       chrome.alarms.getAll = jest.fn((callback) => callback([alarm]));
       chrome.tabs.get = jest.fn((tabId, callback) => callback({ id: 123 }));
@@ -178,7 +178,7 @@ describe('Background Script Utility Functions', () => {
 
       // Test the badge text update
       await ChromeAPIWrapper.action.setBadgeText({ tabId: 123, text: '1:00' });
-      
+
       // Verify all the expected calls
       expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
         { tabId: 123, text: '1:00' },
@@ -187,7 +187,7 @@ describe('Background Script Utility Functions', () => {
       expect(chrome.runtime.lastError).toBeNull();
     });
 
-    test('handles non-existent tabs', async () => {
+    test('handles non-existent tabs', async() => {
       chrome.tabs.get = jest.fn((tabId, callback) => {
         chrome.runtime.lastError = { message: 'Tab not found' };
         callback();
@@ -208,7 +208,7 @@ describe('Background Script Utility Functions', () => {
       chrome.runtime.lastError = null;
       jest.clearAllMocks();
       jest.useFakeTimers();
-      
+
       // Mock setInterval
       global.setInterval = jest.fn();
     });
@@ -218,7 +218,7 @@ describe('Background Script Utility Functions', () => {
       jest.restoreAllMocks();
     });
 
-    test('handles successful badge updates', async () => {
+    test('handles successful badge updates', async() => {
       const now = new Date('2024-01-01T12:00:00');
       jest.setSystemTime(now);
 
@@ -247,10 +247,10 @@ describe('Background Script Utility Functions', () => {
       );
     });
 
-    test('handles tab not found error', async () => {
+    test('handles tab not found error', async() => {
       const now = new Date('2024-01-01T12:00:00');
       jest.setSystemTime(now);
-      
+
       const mockAlarms = [{
         name: '456',
         scheduledTime: now.getTime() + 1000
@@ -270,7 +270,7 @@ describe('Background Script Utility Functions', () => {
       expect(chrome.alarms.clear).toHaveBeenCalledWith('456', expect.any(Function));
     });
 
-    test('handles alarm clear error', async () => {
+    test('handles alarm clear error', async() => {
       const mockAlarms = [{
         name: '789',
         scheduledTime: Date.now() + 1000
@@ -297,7 +297,7 @@ describe('Background Script Utility Functions', () => {
       );
     });
 
-    test('handles getAll alarms error', async () => {
+    test('handles getAll alarms error', async() => {
       // Setup error path mock
       chrome.alarms.getAll.mockImplementation(callback => {
         chrome.runtime.lastError = { message: 'Failed to get alarms' };
@@ -323,10 +323,10 @@ describe('Background Script Utility Functions', () => {
       jest.useFakeTimers();
       // Set a fixed date for consistent testing
       jest.setSystemTime(new Date('2024-01-01T15:00:00'));
-      
+
       // Setup Chrome API mocks for YouTube tests
       jest.clearAllMocks();
-      
+
       global.chrome.storage = {
         local: {
           get: jest.fn((keys, callback) => callback({})),
@@ -336,16 +336,16 @@ describe('Background Script Utility Functions', () => {
           })
         }
       };
-      
+
       global.chrome.alarms = {
         create: jest.fn(),
         get: jest.fn((name, callback) => callback(null))
       };
-      
+
       global.chrome.action = {
         setBadgeBackgroundColor: jest.fn()
       };
-      
+
       global.chrome.tabs = {
         query: jest.fn((query, callback) => callback([]))
       };
@@ -370,18 +370,18 @@ describe('Background Script Utility Functions', () => {
       expect(result).toBe(expected);
     });
 
-    test('setYouTubeTimer function exists and can be called', async () => {
+    test('setYouTubeTimer function exists and can be called', async() => {
       const mockTab = { id: 123, url: 'https://youtube.com/watch?v=abc' };
-      
+
       // Verify the function exists and can be called without throwing
       expect(typeof setYouTubeTimer).toBe('function');
-      
+
       // This is a unit test - the function integration with Chrome APIs
       // is better tested in a full Chrome extension environment
       await expect(setYouTubeTimer(mockTab)).resolves.not.toThrow();
     });
 
-    test('setYouTubeTimer does not create a new alarm if one already exists', async () => {
+    test('setYouTubeTimer does not create a new alarm if one already exists', async() => {
       const mockTab = { id: 123, url: 'https://youtube.com/watch?v=abc' };
       const existingAlarm = { name: '123', scheduledTime: Date.now() + 100000 };
 
@@ -393,12 +393,12 @@ describe('Background Script Utility Functions', () => {
 
       // Expect that chrome.alarms.create was not called
       expect(global.chrome.alarms.create).not.toHaveBeenCalled();
-      
+
       // Restore original method
       ChromeAPIWrapper.alarms.get = originalGet;
     });
 
-    test('setYouTubeTimer creates a new alarm if one does not exist', async () => {
+    test('setYouTubeTimer creates a new alarm if one does not exist', async() => {
       const mockTab = { id: 456, url: 'https://youtube.com/watch?v=def' };
 
       // Mock ChromeAPIWrapper methods
@@ -416,7 +416,7 @@ describe('Background Script Utility Functions', () => {
 
       // Expect that ChromeAPIWrapper.alarms.create was called
       expect(ChromeAPIWrapper.alarms.create).toHaveBeenCalled();
-      
+
       // Restore original methods
       ChromeAPIWrapper.alarms.get = originalGet;
       ChromeAPIWrapper.storage.local.set = originalStorageSet;
@@ -424,31 +424,31 @@ describe('Background Script Utility Functions', () => {
       ChromeAPIWrapper.alarms.create = originalAlarmsCreate;
     });
 
-    test('setYouTubeTimer handles errors gracefully', async () => {
+    test('setYouTubeTimer handles errors gracefully', async() => {
       const mockTab = { id: 123, url: 'https://youtube.com/watch?v=abc' };
       const testError = new Error('Alarm get error');
-      
+
       // Mock ChromeAPIWrapper.alarms.get to throw an error
       const originalGet = ChromeAPIWrapper.alarms.get;
       ChromeAPIWrapper.alarms.get = jest.fn().mockRejectedValue(testError);
-      
+
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-      
+
       await setYouTubeTimer(mockTab);
-      
+
       expect(consoleSpy).toHaveBeenCalledWith('Failed to set YouTube timer:', testError);
-      
+
       // Restore original methods
       ChromeAPIWrapper.alarms.get = originalGet;
       consoleSpy.mockRestore();
     });
 
-    test('checkAndSetYouTubeTimers processes YouTube tabs', async () => {
+    test('checkAndSetYouTubeTimers processes YouTube tabs', async() => {
       // This is a more complex integration test that would require
       // mocking the global chrome object completely. For now, we verify
       // the function exists and can be called
       expect(typeof checkAndSetYouTubeTimers).toBe('function');
-      
+
       // The actual implementation tests are covered by individual function tests
       // and real Chrome extension testing would require a full extension environment
     });

@@ -11,7 +11,7 @@ const createChromeMocks = () => {
         if (callback) callback([]);
         return Promise.resolve([]);
       }),
-      create: jest.fn((name, alarmInfo) => {
+      create: jest.fn((_name, _alarmInfo) => {
         return Promise.resolve();
       }),
       get: jest.fn((name, callback) => {
@@ -39,7 +39,7 @@ const createChromeMocks = () => {
       })
     },
     action: {
-      setBadgeBackgroundColor: jest.fn((options) => {
+      setBadgeBackgroundColor: jest.fn((_options) => {
         return Promise.resolve();
       }),
       setBadgeText: jest.fn((options, callback) => {
