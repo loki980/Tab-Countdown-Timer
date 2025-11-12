@@ -22,7 +22,14 @@ if (typeof chrome === 'undefined' && ChromeAPIWrapper) {
   }
 }
 
-$(document).ready(function() {
+let hasInitialized = false;
+
+const initPopup = function() {
+  if (hasInitialized) {
+    return;
+  }
+  hasInitialized = true;
+
   // Hide the cancel timer div and action options by default
   $('#cancelDiv').hide();
   $('.action-options').hide();
@@ -349,4 +356,10 @@ $(document).ready(function() {
     fixOverflowAndUnderflows();
     updateStartButtonState();
   });
-});
+};
+
+$(document).ready(initPopup);
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { initPopup };
+}
