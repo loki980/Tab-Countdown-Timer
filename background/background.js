@@ -443,6 +443,7 @@ if (typeof module !== 'undefined' && module.exports) {
     ChromeAPIWrapper,
     HandleRemove,
     UpdateBadges: UpdateBadges,
+    pauseYouTubeVideo,
     getMillisecondsUntil10PM,
     setYouTubeTimer,
     checkAndSetYouTubeTimers
