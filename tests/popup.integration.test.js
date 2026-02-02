@@ -320,4 +320,68 @@ describe('popup.js integration coverage', () => {
     $('#hours').trigger(wheelHours);
     expect(hoursInput.value).toBe('0');
   });
+
+  test('start button logs error when Chrome API fails', async() => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    await loadPopup({ storedMinutes: 5 });
+
+    // Make tabs.query throw an error
+    chrome.tabs.query.mockImplementation(() => {
+      throw new Error('Query failed');
+    });
+
+    $('#startbutton').trigger('click');
+    await flushPromises();
+
+    expect(consoleSpy).toHaveBeenCalledWith('Error starting timer:', expect.any(Error));
+    consoleSpy.mockRestore();
+  });
+
+  test('cancel button logs error when Chrome API fails', async() => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    await loadPopup({ alarm: { scheduledTime: Date.now() + 60000 } });
+
+    // Make tabs.query throw an error
+    chrome.tabs.query.mockImplementation(() => {
+      throw new Error('Query failed');
+    });
+
+    $('#cancelbutton').trigger('click');
+    await flushPromises();
+
+    expect(consoleSpy).toHaveBeenCalledWith('Error canceling timer:', expect.any(Error));
+    consoleSpy.mockRestore();
+  });
+
+  test('pause button logs error when Chrome API fails', async() => {
+    const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+    await loadPopup({ alarm: { scheduledTime: Date.now() + 60000 } });
+
+    // Make tabs.query throw an error on subsequent calls
+    chrome.tabs.query.mockImplementation(() => {
+      throw new Error('Query failed');
+    });
+
+    $('#pausebutton').trigger('click');
+    await flushPromises();
+
+    expect(consoleSpy).toHaveBeenCalledWith('Error handling pause:', expect.any(Error));
+    consoleSpy.mockRestore();
+  });
+
+  test('paused countdown displays the paused time remaining', async() => {
+    const tabId = 5555;
+    await loadPopup({ tabId, alarm: { scheduledTime: Date.now() + 120000 } });
+
+    // First click to pause
+    $('#pausebutton').trigger('click');
+    await flushPromises();
+
+    expect($('#pausebutton').text()).toBe('Resume');
+    // The displayTime function should still show the paused time
+    expect($('#timeRemaining').text()).toMatch(/\d+h \d+m \d+s/);
+  });
 });

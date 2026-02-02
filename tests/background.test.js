@@ -720,5 +720,79 @@ describe('Background Script Utility Functions', () => {
     test('action.setBadgeText resolves when chrome is unavailable', async() => {
       await expect(ChromeAPIWrapper.action.setBadgeText({ text: '' })).resolves.toBeUndefined();
     });
+
+    test('tabs.get rejects when Tabs API is unavailable', async() => {
+      await expect(ChromeAPIWrapper.tabs.get(123)).rejects.toThrow('Tabs API not available');
+    });
+
+    test('storage.local.set resolves when storage is unavailable', async() => {
+      await expect(ChromeAPIWrapper.storage.local.set({ foo: 'bar' })).resolves.toBeUndefined();
+    });
+  });
+
+  describe('Alarm listener error handling', () => {
+    const primaryAlarmHandler = alarmListeners[0];
+
+    test('logs error when alarm handler fails', async() => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockRejectedValue(new Error('Tab check failed'));
+
+      await primaryAlarmHandler({ name: '999' });
+
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to handle alarm:', expect.any(Error));
+
+      consoleSpy.mockRestore();
+      existsSpy.mockRestore();
+    });
+  });
+
+  describe('checkAndSetYouTubeTimers error handling', () => {
+    test('logs error when checking YouTube tabs fails', async() => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+
+      // Mock chrome.tabs.query to throw an error
+      const originalQuery = chrome.tabs.query;
+      chrome.tabs.query = jest.fn((_query, callback) => {
+        throw new Error('Query failed');
+      });
+
+      await checkAndSetYouTubeTimers();
+
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to check YouTube tabs:', expect.any(Error));
+
+      chrome.tabs.query = originalQuery;
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('scripting.executeScript error paths', () => {
+    test('rejects when Chrome runtime reports an error', async() => {
+      chrome.scripting = {
+        executeScript: jest.fn((options, callback) => {
+          chrome.runtime.lastError = { message: 'Script execution failed' };
+          callback(null);
+        })
+      };
+
+      await expect(ChromeAPIWrapper.scripting.executeScript({ target: { tabId: 1 } }))
+        .rejects.toMatchObject({ message: 'Script execution failed' });
+
+      chrome.runtime.lastError = null;
+    });
+  });
+
+  describe('pauseYouTubeVideo error handling', () => {
+    test('logs error when script execution fails', async() => {
+      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+      const executeSpy = jest.spyOn(ChromeAPIWrapper.scripting, 'executeScript')
+        .mockRejectedValue(new Error('Injection failed'));
+
+      await pauseYouTubeVideo(123);
+
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to pause YouTube video:', expect.any(Error));
+
+      consoleSpy.mockRestore();
+      executeSpy.mockRestore();
+    });
   });
 });
