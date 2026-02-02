@@ -3,6 +3,22 @@
 ## Project Structure & Module Organization
 Extension logic lives in `background/` (timers, badge updates, alarms) and `popup/` (UI markup, styling, handlers). Vendor assets stay in `lib/`, icons in `icons/`, and tests under `tests/` with mocks in `tests/setup/`. Root configs (`manifest.json`, `jest.config.js`, `scripts/`) keep builds reproducible.
 
+## Key Architecture Concepts
+
+### Timer State Persistence
+Timers persist by **normalized URL** rather than tab ID, allowing timer state to survive tab closure:
+- When a tab with a running timer closes, `HandleRemove` in `background.js` saves remaining time to `chrome.storage.local` keyed by URL
+- When reopening the same URL, `popup.js` checks for saved state and restores the paused timer
+- YouTube URLs normalize to just the video ID (e.g., `paused_youtube_<videoId>`), ignoring `list`, `index`, `t` parameters
+- Non-YouTube URLs use full encoded URL as key (e.g., `paused_<encodedUrl>`)
+- Saved pause states expire after 7 days (`PAUSE_EXPIRY_MS`)
+
+### ChromeAPIWrapper
+`background.js` wraps Chrome extension APIs in `ChromeAPIWrapper` for:
+- Promise-based async/await usage
+- Graceful error handling (e.g., silently ignores "tab not found" errors for badge updates)
+- Testability with Jest mocks in `tests/setup/chrome-mocks.js`
+
 ## Build, Test, and Development Commands
 - `npm install` – installs extension dev dependencies.
 - `npm run build` – runs `scripts/build-extension.js` to emit the `dist/` bundle.
