@@ -22,7 +22,14 @@ if (typeof chrome === 'undefined' && ChromeAPIWrapper) {
   }
 }
 
-$(document).ready(function() {
+let hasInitialized = false;
+
+const initPopup = function() {
+  if (hasInitialized) {
+    return;
+  }
+  hasInitialized = true;
+
   // Hide the cancel timer div and action options by default
   $('#cancelDiv').hide();
   $('.action-options').hide();
@@ -149,8 +156,12 @@ $(document).ready(function() {
     updateCountdown();
     window.countdownInterval = setInterval(updateCountdown, 1000);
 
-    // Update ETA
-    $eta.text(countDownDate ? ('Ends at ' + formatETA(countDownDate)) : '');
+    // Update ETA only if countdown is in the future
+    if (countDownDate && countDownDate > Date.now()) {
+      $eta.text('Ends at ' + formatETA(countDownDate));
+    } else {
+      $eta.text('');
+    }
 
     // Handle pause button
     $pause.off('click').on('click', async function() {
@@ -349,4 +360,10 @@ $(document).ready(function() {
     fixOverflowAndUnderflows();
     updateStartButtonState();
   });
-});
+};
+
+$(document).ready(initPopup);
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { initPopup };
+}

@@ -2,9 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ master, develop, feature/add-ci-cd ]
   pull_request:
-    branches: [ master, develop, feature/add-ci-cd ]
   workflow_dispatch:
 
 jobs:
