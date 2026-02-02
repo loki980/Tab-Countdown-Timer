@@ -859,4 +859,181 @@ describe('Background Script Utility Functions', () => {
       executeSpy.mockRestore();
     });
   });
+
+  describe('Auto-start timer functions', () => {
+    const { getMillisecondsUntilTime, checkAutoStartRule, autoStartTimerForTab } = require('../background/background.js');
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2024-01-15T14:00:00'));
+      jest.clearAllMocks();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    describe('getMillisecondsUntilTime', () => {
+      test('calculates correctly for future time same day', () => {
+        // At 2 PM, calculate time until 10 PM
+        const result = getMillisecondsUntilTime(22, 0);
+        const expected = 8 * 60 * 60 * 1000; // 8 hours
+        expect(result).toBe(expected);
+      });
+
+      test('calculates correctly for past time (sets to next day)', () => {
+        // At 2 PM, calculate time until 10 AM (already passed)
+        const result = getMillisecondsUntilTime(10, 0);
+        // Should be 20 hours until 10 AM next day
+        const expected = 20 * 60 * 60 * 1000;
+        expect(result).toBe(expected);
+      });
+
+      test('calculates correctly with minutes', () => {
+        // At 2 PM (14:00), calculate time until 10:30 PM (22:30)
+        const result = getMillisecondsUntilTime(22, 30);
+        const expected = 8.5 * 60 * 60 * 1000; // 8.5 hours
+        expect(result).toBe(expected);
+      });
+    });
+
+    describe('checkAutoStartRule', () => {
+      test('returns null when no rules exist', async() => {
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({});
+
+        const result = await checkAutoStartRule('https://example.com');
+        expect(result).toBeNull();
+      });
+
+      test('matches exact URL rule', async() => {
+        const urlKey = 'url_' + encodeURIComponent('https://example.com/page');
+        const rule = { type: 'exact_url', timerMode: 'duration' };
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({
+          autostart_rules: { [urlKey]: rule }
+        });
+
+        const result = await checkAutoStartRule('https://example.com/page');
+        expect(result).toEqual(rule);
+      });
+
+      test('matches YouTube specific video rule', async() => {
+        const rule = { type: 'youtube_video', videoId: 'abc123' };
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({
+          autostart_rules: { 'youtube_abc123': rule }
+        });
+
+        const result = await checkAutoStartRule('https://www.youtube.com/watch?v=abc123');
+        expect(result).toEqual(rule);
+      });
+
+      test('matches YouTube all videos rule when no specific video rule', async() => {
+        const rule = { type: 'youtube_all' };
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({
+          autostart_rules: { 'youtube_all': rule }
+        });
+
+        const result = await checkAutoStartRule('https://www.youtube.com/watch?v=newvideo');
+        expect(result).toEqual(rule);
+      });
+
+      test('prefers specific video rule over all videos rule', async() => {
+        const allRule = { type: 'youtube_all', timerMode: 'duration' };
+        const specificRule = { type: 'youtube_video', videoId: 'specific', timerMode: 'time' };
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({
+          autostart_rules: {
+            'youtube_all': allRule,
+            'youtube_specific': specificRule
+          }
+        });
+
+        const result = await checkAutoStartRule('https://www.youtube.com/watch?v=specific');
+        expect(result).toEqual(specificRule);
+      });
+
+      test('handles invalid URL gracefully', async() => {
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({
+          autostart_rules: {}
+        });
+
+        const result = await checkAutoStartRule('not-a-valid-url');
+        expect(result).toBeNull();
+      });
+    });
+
+    describe('autoStartTimerForTab', () => {
+      test('does not start timer if alarm already exists', async() => {
+        jest.spyOn(ChromeAPIWrapper.alarms, 'get').mockResolvedValue({ name: '123' });
+        const createSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'create');
+
+        const tab = { id: 123, url: 'https://example.com' };
+        const rule = { timerMode: 'duration', duration: { hours: 1, minutes: 0 }, action: 'close' };
+
+        await autoStartTimerForTab(tab, rule);
+
+        expect(createSpy).not.toHaveBeenCalled();
+      });
+
+      test('creates alarm with duration mode', async() => {
+        jest.spyOn(ChromeAPIWrapper.alarms, 'get').mockResolvedValue(null);
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'set').mockResolvedValue();
+        jest.spyOn(ChromeAPIWrapper.action, 'setBadgeBackgroundColor').mockResolvedValue();
+        const createSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'create').mockResolvedValue();
+
+        const tab = { id: 456, url: 'https://example.com' };
+        const rule = { timerMode: 'duration', duration: { hours: 0, minutes: 30 }, action: 'close' };
+
+        await autoStartTimerForTab(tab, rule);
+
+        expect(createSpy).toHaveBeenCalledWith('456', expect.objectContaining({
+          when: expect.any(Number)
+        }));
+      });
+
+      test('creates alarm with time mode', async() => {
+        jest.spyOn(ChromeAPIWrapper.alarms, 'get').mockResolvedValue(null);
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'set').mockResolvedValue();
+        jest.spyOn(ChromeAPIWrapper.action, 'setBadgeBackgroundColor').mockResolvedValue();
+        const createSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'create').mockResolvedValue();
+
+        const tab = { id: 789, url: 'https://example.com' };
+        const rule = { timerMode: 'time', time: { hour: 22, minute: 0 }, action: 'close' };
+
+        await autoStartTimerForTab(tab, rule);
+
+        expect(createSpy).toHaveBeenCalledWith('789', expect.objectContaining({
+          when: expect.any(Number)
+        }));
+      });
+
+      test('saves action and URL to storage', async() => {
+        jest.spyOn(ChromeAPIWrapper.alarms, 'get').mockResolvedValue(null);
+        const setSpy = jest.spyOn(ChromeAPIWrapper.storage.local, 'set').mockResolvedValue();
+        jest.spyOn(ChromeAPIWrapper.action, 'setBadgeBackgroundColor').mockResolvedValue();
+        jest.spyOn(ChromeAPIWrapper.alarms, 'create').mockResolvedValue();
+
+        const tab = { id: 111, url: 'https://test.com' };
+        const rule = { timerMode: 'duration', duration: { hours: 1, minutes: 0 }, action: 'pause' };
+
+        await autoStartTimerForTab(tab, rule);
+
+        expect(setSpy).toHaveBeenCalledWith({
+          '111_action': 'pause',
+          '111_url': 'https://test.com'
+        });
+      });
+
+      test('handles errors gracefully', async() => {
+        const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
+        jest.spyOn(ChromeAPIWrapper.alarms, 'get').mockRejectedValue(new Error('Test error'));
+
+        const tab = { id: 222, url: 'https://example.com' };
+        const rule = { timerMode: 'duration', duration: { hours: 1, minutes: 0 }, action: 'close' };
+
+        await autoStartTimerForTab(tab, rule);
+
+        expect(consoleSpy).toHaveBeenCalledWith('Failed to auto-start timer for tab:', expect.any(Error));
+        consoleSpy.mockRestore();
+      });
+    });
+  });
 });

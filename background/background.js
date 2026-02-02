@@ -427,6 +427,85 @@ function getMillisecondsUntil10PM() {
   return target.getTime() - now.getTime();
 }
 
+// Calculate milliseconds until a specific time today (or tomorrow if past)
+function getMillisecondsUntilTime(hour, minute) {
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(hour, minute, 0, 0);
+
+  // If target time has passed today, set for tomorrow
+  if (now >= target) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  return target.getTime() - now.getTime();
+}
+
+// Check if a URL matches any auto-start rule
+async function checkAutoStartRule(url) {
+  const data = await ChromeAPIWrapper.storage.local.get(['autostart_rules']);
+  const rules = data.autostart_rules || {};
+
+  try {
+    const urlObj = new URL(url);
+    // Check for YouTube video rules (specific video > all YouTube)
+    if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
+      const videoId = urlObj.searchParams.get('v');
+      const videoKey = `youtube_${videoId}`;
+      if (rules[videoKey]) return rules[videoKey];
+      if (rules['youtube_all']) return rules['youtube_all'];
+    }
+    // Check for exact URL match
+    const urlKey = `url_${encodeURIComponent(urlObj.href)}`;
+    if (rules[urlKey]) return rules[urlKey];
+  } catch (e) {
+    // Invalid URL - try direct match
+    const urlKey = `url_${encodeURIComponent(url)}`;
+    if (rules[urlKey]) return rules[urlKey];
+  }
+  return null;
+}
+
+// Auto-start a timer for a tab based on a rule
+async function autoStartTimerForTab(tab, rule) {
+  const tabIdStr = tab.id.toString();
+
+  try {
+    // Skip if alarm already exists for this tab
+    const existingAlarm = await ChromeAPIWrapper.alarms.get(tabIdStr);
+    if (existingAlarm) return;
+
+    // Calculate duration based on timer mode
+    let durationMs;
+    if (rule.timerMode === 'time') {
+      durationMs = getMillisecondsUntilTime(rule.time.hour, rule.time.minute);
+    } else {
+      durationMs = ((rule.duration.hours * 60) + rule.duration.minutes) * 60 * 1000;
+    }
+
+    if (durationMs <= 0) return;
+
+    // Save action and URL for this tab
+    await ChromeAPIWrapper.storage.local.set({
+      [tabIdStr + '_action']: rule.action,
+      [tabIdStr + '_url']: tab.url
+    });
+
+    // Set initial badge color
+    await ChromeAPIWrapper.action.setBadgeBackgroundColor({
+      tabId: tab.id,
+      color: '#666666'
+    });
+
+    // Create the alarm
+    await ChromeAPIWrapper.alarms.create(tabIdStr, {
+      when: Date.now() + durationMs
+    });
+  } catch (error) {
+    console.error('Failed to auto-start timer for tab:', error);
+  }
+}
+
 // Function to set timer for YouTube tab
 async function setYouTubeTimer(tab) {
   const tabId = tab.id.toString();
@@ -506,6 +585,23 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
 }
 */
 
+// Auto-start timers based on saved rules when tabs are created or navigated
+if (typeof chrome !== 'undefined' && chrome.tabs) {
+  chrome.tabs.onCreated.addListener(async (tab) => {
+    if (tab.url) {
+      const rule = await checkAutoStartRule(tab.url);
+      if (rule) await autoStartTimerForTab(tab, rule);
+    }
+  });
+
+  chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    if (changeInfo.status === 'complete' && tab.url) {
+      const rule = await checkAutoStartRule(tab.url);
+      if (rule) await autoStartTimerForTab(tab, rule);
+    }
+  });
+}
+
 // Export for testing
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -515,7 +611,10 @@ if (typeof module !== 'undefined' && module.exports) {
     UpdateBadges: UpdateBadges,
     pauseYouTubeVideo,
     getMillisecondsUntil10PM,
+    getMillisecondsUntilTime,
     setYouTubeTimer,
-    checkAndSetYouTubeTimers
+    checkAndSetYouTubeTimers,
+    checkAutoStartRule,
+    autoStartTimerForTab
   };
 }
