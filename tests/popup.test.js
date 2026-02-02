@@ -146,12 +146,17 @@ describe('Popup Script Functionality', () => {
       }, 100);
     });
 
-    test('should initialize YouTube action options and persist selection', (done) => {
+    test('should initialize YouTube action options and persist selection', async() => {
       const tabId = 456;
       let storedValues = {};
 
       chrome.tabs.query.mockImplementation((query, callback) => {
         callback([{ id: tabId, url: 'https://www.youtube.com/watch?v=abc' }]);
+      });
+
+      chrome.alarms.get.mockImplementation((id, callback) => {
+        if (callback) callback(null);
+        return Promise.resolve(null);
       });
 
       chrome.storage.local.get.mockImplementation((keys, callback) => {
@@ -162,7 +167,8 @@ describe('Popup Script Functionality', () => {
             result[key] = storedValues[key];
           }
         });
-        callback(result);
+        if (callback) callback(result);
+        return Promise.resolve(result);
       });
 
       chrome.storage.local.set.mockImplementation((items, callback) => {
@@ -171,33 +177,62 @@ describe('Popup Script Functionality', () => {
         return Promise.resolve();
       });
 
+      // Clear module cache to reset hasInitialized flag
+      jest.resetModules();
       delete require.cache[require.resolve('../popup/popup.js')];
+      delete require.cache[require.resolve('../background/background.js')];
 
-      // Manually inject and execute the script
-      const scriptContent = require('fs').readFileSync('popup/popup.js', 'utf8');
-      const scriptEl = document.createElement('script');
-      scriptEl.textContent = scriptContent;
-      document.body.appendChild(scriptEl);
+      // Re-create chrome mocks since resetModules clears global
+      const { createChromeMocks } = require('./setup/chrome-mocks');
+      global.chrome = createChromeMocks();
 
-      setTimeout(() => {
-        const actionOptions = $('.action-options');
-        expect(actionOptions.css('display')).toBe('block');
+      // Re-apply our specific mocks
+      chrome.tabs.query.mockImplementation((query, callback) => {
+        callback([{ id: tabId, url: 'https://www.youtube.com/watch?v=abc' }]);
+      });
+      chrome.alarms.get.mockImplementation((id, callback) => {
+        if (callback) callback(null);
+        return Promise.resolve(null);
+      });
+      chrome.storage.local.get.mockImplementation((keys, callback) => {
+        const result = {};
+        const keysArr = Array.isArray(keys) ? keys : [keys];
+        keysArr.forEach(key => {
+          if (key.endsWith('_action') && storedValues[key]) {
+            result[key] = storedValues[key];
+          }
+        });
+        if (callback) callback(result);
+        return Promise.resolve(result);
+      });
+      chrome.storage.local.set.mockImplementation((items, callback) => {
+        storedValues = { ...storedValues, ...items };
+        if (callback) callback();
+        return Promise.resolve();
+      });
 
-        const pauseRadio = $('input[name="timerAction"][value="pause"]');
-        expect(pauseRadio.prop('checked')).toBe(true);
-        expect(pauseRadio.prop('disabled')).toBe(false);
+      const { initPopup } = require('../popup/popup.js');
+      initPopup();
 
-        const closeRadio = $('input[name="timerAction"][value="close"]');
-        closeRadio.prop('checked', true).trigger('change');
+      // Wait for async operations
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-        setTimeout(() => {
-          expect(chrome.storage.local.set).toHaveBeenCalledWith({
-            [`${tabId}_action`]: 'close'
-          });
-          expect(storedValues[`${tabId}_action`]).toBe('close');
-          done();
-        }, 100);
-      }, 100);
+      const actionOptions = $('.action-options');
+      expect(actionOptions.css('display')).toBe('block');
+
+      const pauseRadio = $('input[name="timerAction"][value="pause"]');
+      expect(pauseRadio.prop('checked')).toBe(true);
+      expect(pauseRadio.prop('disabled')).toBe(false);
+
+      const closeRadio = $('input[name="timerAction"][value="close"]');
+      closeRadio.prop('checked', true).trigger('change');
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(chrome.storage.local.set).toHaveBeenCalledWith({
+        [`${tabId}_action`]: 'close'
+      });
+      expect(storedValues[`${tabId}_action`]).toBe('close');
     });
 
     test('should handle YouTube tab detection', () => {

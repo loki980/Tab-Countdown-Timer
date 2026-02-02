@@ -90,6 +90,13 @@ const loadPopup = async({
     return Promise.resolve();
   });
 
+  chrome.storage.local.remove = jest.fn((keys, callback) => {
+    const keysArr = Array.isArray(keys) ? keys : [keys];
+    keysArr.forEach(key => delete persisted[key]);
+    if (callback) callback();
+    return Promise.resolve();
+  });
+
   delete require.cache[require.resolve('../background/background.js')];
   delete require.cache[require.resolve('../popup/popup.js')];
   const popupModule = require('../popup/popup.js');
@@ -382,6 +389,181 @@ describe('popup.js integration coverage', () => {
 
     expect($('#pausebutton').text()).toBe('Resume');
     // The displayTime function should still show the paused time
+    expect($('#timeRemaining').text()).toMatch(/\d+h \d+m \d+s/);
+  });
+
+  test('restores paused timer from URL-based storage', async() => {
+    const tabId = 7777;
+    const testUrl = 'https://example.com/page';
+    const urlKey = 'paused_' + encodeURIComponent(testUrl);
+
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: tabId, url: testUrl };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    // No active alarm
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    // Return paused state from storage
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === urlKey) {
+          result[key] = {
+            pausedTimeRemaining: 60000, // 1 minute remaining
+            pausedAt: Date.now() - 1000 // Paused 1 second ago (not expired)
+          };
+        }
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    chrome.storage.local.remove = jest.fn((keys, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    const popupModule = require('../popup/popup.js');
+    popupModule.initPopup();
+    await flushPromises();
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Should show cancel UI and Resume button
+    expect($('#cancelDiv').css('display')).toBe('block');
+    expect($('#pausebutton').text()).toBe('Resume');
+    expect($('#startbutton').text()).toBe('Update timer');
+  });
+
+  test('clears expired paused timer from URL-based storage', async() => {
+    const tabId = 8888;
+    const testUrl = 'https://example.com/expired';
+    const urlKey = 'paused_' + encodeURIComponent(testUrl);
+
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: tabId, url: testUrl };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    // Return expired pause state (8 days old)
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === urlKey) {
+          result[key] = {
+            pausedTimeRemaining: 60000,
+            pausedAt: Date.now() - (8 * 24 * 60 * 60 * 1000) // 8 days ago (expired)
+          };
+        }
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.remove = jest.fn((keys, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    const popupModule = require('../popup/popup.js');
+    popupModule.initPopup();
+    await flushPromises();
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Should have removed the expired pause state
+    expect(chrome.storage.local.remove).toHaveBeenCalledWith(urlKey);
+    // Cancel div should be hidden (no timer active)
+    expect($('#cancelDiv').css('display')).toBe('none');
+  });
+
+  test('setupCountdown with initial pause state sets UI correctly', async() => {
+    const tabId = 9999;
+    const testUrl = 'https://example.com/paused';
+    const urlKey = 'paused_' + encodeURIComponent(testUrl);
+
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: tabId, url: testUrl };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    // Return valid pause state
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === urlKey) {
+          result[key] = {
+            pausedTimeRemaining: 120000, // 2 minutes
+            pausedAt: Date.now() - 5000 // 5 seconds ago
+          };
+        }
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    chrome.storage.local.remove = jest.fn((keys, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    const popupModule = require('../popup/popup.js');
+    popupModule.initPopup();
+    await flushPromises();
+    await new Promise(resolve => setTimeout(resolve, 150));
+
+    // Verify the paused UI state
+    expect($('#pausebutton').hasClass('paused')).toBe(true);
+    expect($('#pausebutton').text()).toBe('Resume');
+    expect($('#eta').text()).toBe('');
+    // Time remaining should be displayed
     expect($('#timeRemaining').text()).toMatch(/\d+h \d+m \d+s/);
   });
 });

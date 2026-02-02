@@ -76,6 +76,12 @@ describe('Popup Events', () => {
       return Promise.resolve(tabs);
     });
 
+    // Mock storage.local.remove for URL-based pause state clearing
+    chromeMocks.storage.local.remove = jest.fn((keys, cb) => {
+      if (cb) cb();
+      return Promise.resolve();
+    });
+
     await loadPopup();
 
     const startBtn = $('#startbutton');
@@ -96,27 +102,33 @@ describe('Popup Events', () => {
   });
 
   test('Cancel Button click clears alarm and resets UI', async () => {
-    await loadPopup();
-    
-    // Setup UI in "started" state
-    $('#cancelDiv').show();
-    
-    const cancelBtn = $('#cancelbutton');
-    const pauseBtn = $('#pausebutton');
-    
-    // Pause button might have been toggled
-    pauseBtn.addClass('paused').text('Resume');
-    
     chromeMocks.tabs.query.mockImplementation((q, cb) => {
-      const tabs = [{ id: 123 }];
+      const tabs = [{ id: 123, url: 'http://example.com' }];
       if (cb) cb(tabs);
       return Promise.resolve(tabs);
     });
 
+    // Mock storage.local.remove for URL-based pause state clearing
+    chromeMocks.storage.local.remove = jest.fn((keys, cb) => {
+      if (cb) cb();
+      return Promise.resolve();
+    });
+
+    await loadPopup();
+
+    // Setup UI in "started" state
+    $('#cancelDiv').show();
+
+    const cancelBtn = $('#cancelbutton');
+    const pauseBtn = $('#pausebutton');
+
+    // Pause button might have been toggled - but reset it first
+    pauseBtn.removeClass('paused').text('Pause');
+
     cancelBtn.click();
-    
+
     await new Promise(r => setTimeout(r, 100));
-    
+
     expect(chromeMocks.alarms.clear).toHaveBeenCalledWith('123');
     expect($('#cancelDiv').is(':visible')).toBe(false);
     expect(pauseBtn.text()).toBe('Pause');
@@ -129,30 +141,36 @@ describe('Popup Events', () => {
       cb({ scheduledTime: Date.now() + 10000 });
     });
     chromeMocks.tabs.query.mockImplementation((q, cb) => {
-      const tabs = [{ id: 123 }];
+      const tabs = [{ id: 123, url: 'http://example.com' }];
       if (cb) cb(tabs);
       return Promise.resolve(tabs);
     });
 
+    // Mock storage.local.remove and set for URL-based pause state
+    chromeMocks.storage.local.remove = jest.fn((keys, cb) => {
+      if (cb) cb();
+      return Promise.resolve();
+    });
+
     await loadPopup();
-    
-    // We need to trigger start first to setup countdown logic if possible, 
+
+    // We need to trigger start first to setup countdown logic if possible,
     // But popup.js attaches click handler inside `setupCountdown`.
     // Only if we use `startbutton` or if `chrome.alarms.get` returns an alarm.
-    
+
     const pauseBtn = $('#pausebutton');
-    
+
     // First click: Pause
     pauseBtn.click();
     await new Promise(r => setTimeout(r, 100));
-    
+
     expect(pauseBtn.text()).toBe('Resume');
     expect(chromeMocks.alarms.clear).toHaveBeenCalledWith('123');
-    
+
     // Second click: Resume
     pauseBtn.click();
     await new Promise(r => setTimeout(r, 100));
-    
+
     expect(pauseBtn.text()).toBe('Pause');
     expect(chromeMocks.alarms.create).toHaveBeenCalled();
   });

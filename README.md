@@ -11,13 +11,14 @@ A productivity-focused Chromium browser extension (Chrome, Edge, Brave) that hel
 - **YouTube-Specific Actions**: For YouTube watch pages, choose to pause the video instead of closing the tab (default for YouTube).
 - **Real-Time Feedback**: Extension badge shows remaining time (e.g., "1:23"), updates every second, turns red under 30 seconds, and grays when paused.
 - **Controls**: Pause/resume, cancel timers; supports multiple tabs simultaneously.
+- **Persistent Timers**: Running or paused timers are saved when tabs close and automatically restore when reopening the same URL (7-day expiration).
 - **Enhanced UI**: 
   - Preset buttons for common durations.
   - Keyboard arrows (up/down) and mouse wheel for quick adjustments; Shift+wheel accelerates minutes.
   - Handles input overflow/underflow (e.g., 70 minutes becomes 1h 10m).
   - ETA display and persists last-used values.
 - **Unobtrusive Design**: No auto-scheduling; user-initiated only for direct control.
-- **Tested & Stable**: Version 1.3.1 with Jest unit tests for core functionality.
+- **Tested & Stable**: Version 1.4.0 with Jest unit tests for core functionality.
 
 ## Installation
 
@@ -79,7 +80,11 @@ Tab-Countdown-Timer/
 │   └── jest/                # Jest output
 └── tests/                   # Jest tests
     ├── background.test.js   # Background script tests
+    ├── background_listeners.test.js  # Alarm and badge listener tests
     ├── popup.test.js        # Popup functionality tests
+    ├── popup.behavior.test.js       # Popup integration tests
+    ├── popup.integration.test.js    # URL persistence tests
+    ├── popup_events.test.js         # UI event handler tests
     └── setup/
         └── chrome-mocks.js  # API mocks for testing
 ```
@@ -132,7 +137,14 @@ Current coverage: Core utilities (e.g., `FormatDuration`), alarm handling, YouTu
 
 ## Changelog
 
-### v1.3.1 (Recent)
+### v1.4.0 (Recent)
+- **Persistent Timers**: Timer state now persists by URL—closing a tab saves remaining time; reopening restores it.
+- YouTube URLs normalized to video ID only (playlist/index/timestamp params ignored for matching).
+- 7-day expiration on saved pause states.
+- Fixed "No tab with id" errors when tabs close during badge updates.
+- Comprehensive test coverage for new persistence features.
+
+### v1.3.1
 - UI enhancements: Arrow keys, mouse wheel (Shift+ for minutes), overflow handling.
 - Bug fixes: Verify tab existence before close; removed auto-10PM YouTube timers.
 - Added comments to ChromeAPIWrapper.

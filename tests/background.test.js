@@ -105,7 +105,7 @@ describe('Background Script Utility Functions', () => {
 
       // Test badge-related methods
       ChromeAPIWrapper.action.setBadgeBackgroundColor({ color: '#777' });
-      expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({ color: '#777' });
+      expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith({ color: '#777' }, expect.any(Function));
 
       await ChromeAPIWrapper.action.setBadgeText({ tabId: 123, text: '2:00' });
       expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
@@ -192,20 +192,82 @@ describe('Background Script Utility Functions', () => {
    * Tests for HandleRemove function
    */
   describe('HandleRemove', () => {
-    test('clears alarm when a tab is removed', () => {
+    test('clears alarm when a tab is removed', async() => {
       const tabId = 123;
-      HandleRemove(tabId);
+      chrome.alarms.get = jest.fn((name, callback) => {
+        callback(null); // No alarm for this tab
+      });
+      chrome.alarms.clear = jest.fn((name, callback) => {
+        chrome.runtime.lastError = null;
+        callback(true);
+      });
+      chrome.storage.local.get = jest.fn((keys, callback) => {
+        callback({});
+      });
+      chrome.storage.local.remove = jest.fn((keys, callback) => {
+        callback();
+      });
+
+      await HandleRemove(tabId);
       expect(chrome.alarms.clear).toHaveBeenCalledWith(tabId.toString(), expect.any(Function));
+    });
+
+    test('saves timer state when tab with running timer is closed', async() => {
+      const tabId = 123;
+      const futureTime = Date.now() + 60000;
+      const testUrl = 'https://example.com/page';
+
+      chrome.alarms.get = jest.fn((name, callback) => {
+        callback({ scheduledTime: futureTime }); // Running alarm
+      });
+      chrome.alarms.clear = jest.fn((name, callback) => {
+        chrome.runtime.lastError = null;
+        callback(true);
+      });
+      chrome.storage.local.get = jest.fn((keys, callback) => {
+        callback({ '123_url': testUrl });
+      });
+      chrome.storage.local.set = jest.fn((items, callback) => {
+        callback();
+      });
+      chrome.storage.local.remove = jest.fn((keys, callback) => {
+        callback();
+      });
+
+      await HandleRemove(tabId);
+
+      expect(chrome.storage.local.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ['paused_' + encodeURIComponent(testUrl)]: expect.objectContaining({
+            pausedTimeRemaining: expect.any(Number),
+            pausedAt: expect.any(Number)
+          })
+        }),
+        expect.any(Function)
+      );
+      expect(chrome.storage.local.remove).toHaveBeenCalledWith(
+        ['123_url', '123_action'],
+        expect.any(Function)
+      );
     });
 
     test('handles errors when clearing alarm', async() => {
       const tabId = 123;
+      chrome.alarms.get = jest.fn((name, callback) => {
+        callback(null);
+      });
       chrome.alarms.clear = jest.fn((name, callback) => {
         chrome.runtime.lastError = { message: 'Failed to clear alarm' };
         callback(false);
       });
+      chrome.storage.local.get = jest.fn((keys, callback) => {
+        callback({});
+      });
+      chrome.storage.local.remove = jest.fn((keys, callback) => {
+        callback();
+      });
 
-      HandleRemove(tabId);
+      await HandleRemove(tabId);
       expect(chrome.alarms.clear).toHaveBeenCalledWith(tabId.toString(), expect.any(Function));
     });
   });
@@ -415,7 +477,9 @@ describe('Background Script Utility Functions', () => {
       };
 
       global.chrome.action = {
-        setBadgeBackgroundColor: jest.fn()
+        setBadgeBackgroundColor: jest.fn((options, callback) => {
+          if (callback) callback();
+        })
       };
 
       global.chrome.tabs = {
