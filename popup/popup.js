@@ -34,6 +34,23 @@ const initPopup = function() {
   $('#cancelDiv').hide();
   $('.action-options').hide();
 
+  // URL normalization for persistent pause state storage
+  function normalizeUrlForStorage(url) {
+    try {
+      const urlObj = new URL(url);
+      // For YouTube, only keep the video ID - other params (t, list, index) can vary
+      if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
+        const videoId = urlObj.searchParams.get('v');
+        return 'paused_youtube_' + videoId;
+      }
+      return 'paused_' + encodeURIComponent(urlObj.href);
+    } catch (e) {
+      return 'paused_' + encodeURIComponent(url);
+    }
+  }
+
+  const PAUSE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
   const $hours = $('#hours');
   const $minutes = $('#minutes');
   const $start = $('#startbutton');
@@ -123,14 +140,21 @@ const initPopup = function() {
     }
   }
 
-  function setupCountdown(tabIdStr, countDownDate) {
+  function setupCountdown(tabIdStr, countDownDate, initialPauseState = null) {
     // Clear any existing countdown interval
     if (window.countdownInterval) {
       clearInterval(window.countdownInterval);
     }
 
-    let isPaused = false;
-    let pausedTimeRemaining = null;
+    let isPaused = initialPauseState ? true : false;
+    let pausedTimeRemaining = initialPauseState ? initialPauseState.pausedTimeRemaining : null;
+
+    // If restoring paused state, update UI immediately
+    if (isPaused && pausedTimeRemaining) {
+      $pause.addClass('paused').text('Resume');
+      displayTime(pausedTimeRemaining);
+      $eta.text('');
+    }
 
     function updateCountdown() {
       if (isPaused) {
@@ -156,10 +180,10 @@ const initPopup = function() {
     updateCountdown();
     window.countdownInterval = setInterval(updateCountdown, 1000);
 
-    // Update ETA only if countdown is in the future
-    if (countDownDate && countDownDate > Date.now()) {
+    // Update ETA only if countdown is in the future (and not paused)
+    if (!isPaused && countDownDate && countDownDate > Date.now()) {
       $eta.text('Ends at ' + formatETA(countDownDate));
-    } else {
+    } else if (!isPaused) {
       $eta.text('');
     }
 
@@ -180,16 +204,27 @@ const initPopup = function() {
         const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
         const tabId = parseInt(tabs[0].id);
         const tabKey = tabs[0].id.toString();
+        const urlKey = normalizeUrlForStorage(tabs[0].url);
+
         if (isPaused) {
           await chrome.alarms.clear(tabKey);
           await chrome.action.setBadgeBackgroundColor({
             tabId: tabId,
             color: '#666666'
           });
+          // Save pause state by normalized URL
+          await chrome.storage.local.set({
+            [urlKey]: {
+              pausedTimeRemaining: pausedTimeRemaining,
+              pausedAt: Date.now()
+            }
+          });
         } else {
           await chrome.alarms.create(tabKey, {
             when: countDownDate
           });
+          // Clear the URL-based pause state on resume
+          await chrome.storage.local.remove(urlKey);
         }
       } catch (error) {
         console.error('Error handling pause:', error);
@@ -201,13 +236,33 @@ const initPopup = function() {
   chrome.tabs.query({ active: true, currentWindow: true }, async function(tabs) {
     const currentTab = tabs[0];
     const tabIdStr = currentTab.id.toString();
+    const urlKey = normalizeUrlForStorage(currentTab.url);
 
     // Check if there's an active alarm for this tab
-    chrome.alarms.get(tabIdStr, function(alarm) {
+    chrome.alarms.get(tabIdStr, async function(alarm) {
       if (alarm) {
         $('#cancelDiv').show();
         $start.text('Update timer');
         setupCountdown(tabIdStr, alarm.scheduledTime);
+        return;
+      }
+
+      // No active alarm - check for URL-based paused state
+      const pauseData = await chrome.storage.local.get([urlKey]);
+      const pauseState = pauseData[urlKey];
+
+      if (pauseState && pauseState.pausedTimeRemaining) {
+        // Check if pause state has expired (7 days)
+        const age = Date.now() - pauseState.pausedAt;
+        if (age < PAUSE_EXPIRY_MS) {
+          // Valid paused timer found - show resume UI
+          $('#cancelDiv').show();
+          $start.text('Update timer');
+          setupCountdown(tabIdStr, null, pauseState);
+        } else {
+          // Expired - clean it up
+          await chrome.storage.local.remove(urlKey);
+        }
       }
     });
 
@@ -270,12 +325,16 @@ const initPopup = function() {
         action = $('input[name="timerAction"]:checked').val();
       }
 
-      // Store the selected action with the alarm + remember last duration
+      // Store the selected action with the alarm + remember last duration + track URL
       await chrome.storage.local.set({
         [tabIdStr + '_action']: action,
+        [tabIdStr + '_url']: tabs[0].url,
         'hours': $hours[0].value,
         'minutes': $minutes[0].value
       });
+
+      // Clear any existing pause state for this URL
+      await chrome.storage.local.remove(normalizeUrlForStorage(tabs[0].url));
 
       // Set initial badge color
       await chrome.action.setBadgeBackgroundColor({
@@ -304,9 +363,15 @@ const initPopup = function() {
     try {
       const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
       const tabId = parseInt(tabs[0].id);
+      const tabKey = tabs[0].id.toString();
+      const urlKey = normalizeUrlForStorage(tabs[0].url);
+
       await chrome.action.setBadgeText({ tabId: tabId, text: '' });
       await chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#666666' });
-      await chrome.alarms.clear(tabs[0].id.toString());
+      await chrome.alarms.clear(tabKey);
+      // Clear URL-based pause state AND URL tracking
+      await chrome.storage.local.remove([urlKey, tabKey + '_url', tabKey + '_action']);
+
       $('#cancelDiv').hide();
       $start.text('Start timer');
 

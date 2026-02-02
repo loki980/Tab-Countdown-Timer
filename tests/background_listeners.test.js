@@ -57,7 +57,7 @@ describe('Background Listeners', () => {
       expect(chromeMocks.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
         tabId: tabId,
         color: '#666666'
-      });
+      }, expect.any(Function));
     });
 
     test('should pause video calls executeScript for YouTube tab with pause action', async () => {
@@ -154,7 +154,7 @@ describe('Background Listeners', () => {
       expect(chromeMocks.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
         tabId: tabId,
         color: '#666666' // > 30s
-      });
+      }, expect.any(Function));
     });
 
     test('should use red badge for under 30 seconds', async () => {
@@ -177,7 +177,7 @@ describe('Background Listeners', () => {
       expect(chromeMocks.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
         tabId: tabId,
         color: '#ff0000'
-      });
+      }, expect.any(Function));
     });
 
     test('should clear alarm if tab does not exist during update', async () => {

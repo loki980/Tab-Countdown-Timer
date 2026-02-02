@@ -126,10 +126,20 @@ const ChromeAPIWrapper = {
   },
   action: {
     // Sets the background color of the extension's badge.
-    setBadgeBackgroundColor: (color) => {
-      if (typeof chrome !== 'undefined' && chrome.action) {
-        chrome.action.setBadgeBackgroundColor(color);
-      }
+    setBadgeBackgroundColor: (options) => {
+      return new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.action) {
+          chrome.action.setBadgeBackgroundColor(options, () => {
+            // Ignore errors (e.g., tab not found) - just resolve
+            if (chrome.runtime.lastError) {
+              // Silently ignore - tab may have been closed
+            }
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
     },
     // Sets the text on the extension's badge.
     setBadgeText: (options) => {
@@ -137,7 +147,13 @@ const ChromeAPIWrapper = {
         if (typeof chrome !== 'undefined' && chrome.action) {
           chrome.action.setBadgeText(options, () => {
             if (chrome.runtime.lastError) {
-              reject(chrome.runtime.lastError);
+              // Ignore "tab not found" errors - tab may have been closed
+              const msg = chrome.runtime.lastError.message || '';
+              if (msg.includes('No tab') || msg.includes('tab')) {
+                resolve();
+              } else {
+                reject(chrome.runtime.lastError);
+              }
             } else {
               resolve();
             }
@@ -181,6 +197,22 @@ const ChromeAPIWrapper = {
             resolve();
           }
         });
+      },
+      // Removes items from local storage.
+      remove: (keys) => {
+        return new Promise((resolve, reject) => {
+          if (typeof chrome !== 'undefined' && chrome.storage) {
+            chrome.storage.local.remove(keys, () => {
+              if (chrome.runtime.lastError) {
+                reject(chrome.runtime.lastError);
+              } else {
+                resolve();
+              }
+            });
+          } else {
+            resolve();
+          }
+        });
       }
     }
   },
@@ -203,6 +235,21 @@ const ChromeAPIWrapper = {
     }
   }
 };
+
+// URL normalization for persistent pause state storage
+function normalizeUrlForStorage(url) {
+  try {
+    const urlObj = new URL(url);
+    // For YouTube, only keep the video ID - other params (t, list, index) can vary
+    if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
+      const videoId = urlObj.searchParams.get('v');
+      return 'paused_youtube_' + videoId;
+    }
+    return 'paused_' + encodeURIComponent(urlObj.href);
+  } catch (e) {
+    return 'paused_' + encodeURIComponent(url);
+  }
+}
 
 // Utility functions
 function FormatDuration(d) {
@@ -277,21 +324,44 @@ ChromeAPIWrapper.alarms.onAlarm.addListener(async function(alarm) {
   }
 });
 
-// When the user closes a tab, clear the associated alarm
-function HandleRemove(tabId, _removeInfo) {
-  ChromeAPIWrapper.alarms.clear(tabId.toString())
-    .then(() => {
-      // Reset badge color when alarm is cleared
-      ChromeAPIWrapper.action.setBadgeBackgroundColor({
-        'tabId': tabId,
-        'color': '#666666'
-      });
-    })
-    .catch(error => {
-      if (error.message !== 'Tab not found') {
-        console.error('Failed to clear alarm:', error);
+// When the user closes a tab, save timer state if running and clear the alarm
+async function HandleRemove(tabId, _removeInfo) {
+  const tabKey = tabId.toString();
+
+  try {
+    // Check if there's an alarm (running timer) for this tab
+    const alarm = await ChromeAPIWrapper.alarms.get(tabKey);
+
+    if (alarm) {
+      // Tab had a running timer - save remaining time by URL
+      const data = await ChromeAPIWrapper.storage.local.get([tabKey + '_url']);
+      const url = data[tabKey + '_url'];
+
+      if (url) {
+        const remainingTime = alarm.scheduledTime - Date.now();
+        if (remainingTime > 0) {
+          const urlKey = normalizeUrlForStorage(url);
+          await ChromeAPIWrapper.storage.local.set({
+            [urlKey]: {
+              pausedTimeRemaining: remainingTime,
+              pausedAt: Date.now()
+            }
+          });
+        }
       }
-    });
+    }
+
+    // Clear the alarm
+    await ChromeAPIWrapper.alarms.clear(tabKey);
+
+    // Clean up tab-specific storage (don't try to set badge - tab is already gone)
+    await ChromeAPIWrapper.storage.local.remove([tabKey + '_url', tabKey + '_action']);
+
+  } catch (error) {
+    if (error.message !== 'Tab not found') {
+      console.error('Failed to handle tab removal:', error);
+    }
+  }
 }
 ChromeAPIWrapper.tabs.onRemoved.addListener(HandleRemove);
 
