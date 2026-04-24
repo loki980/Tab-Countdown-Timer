@@ -381,6 +381,12 @@ const initPopup = function() {
     // Show YouTube-specific dropdown if on YouTube
     if (isYouTube) {
       $youtubeMatchOptions.show();
+
+      // Load global YouTube match type preference
+      const matchPref = await chrome.storage.local.get(['youtube_match_preference']);
+      if (matchPref.youtube_match_preference) {
+        $youtubeMatchType.val(matchPref.youtube_match_preference);
+      }
     }
 
     // Check for existing auto-start rule
@@ -406,12 +412,12 @@ const initPopup = function() {
         $timerTargetTime.val(`${hour}:${minute}`);
       }
 
-      // Set YouTube dropdown if applicable
+      // If no global preference saved, infer from existing rule for backward compatibility
       if (isYouTube) {
-        if (existingRule.key === 'youtube_all') {
-          $youtubeMatchType.val('all');
-        } else {
-          $youtubeMatchType.val('video');
+        const matchPref = await chrome.storage.local.get(['youtube_match_preference']);
+        if (!matchPref.youtube_match_preference) {
+          const inferredPref = existingRule.key === 'youtube_all' ? 'all' : 'video';
+          $youtubeMatchType.val(inferredPref);
         }
       }
     }
@@ -437,7 +443,11 @@ const initPopup = function() {
     // Save rule when settings change
     $('input[name="timerMode"]').on('change', saveAutoStartRule);
     $timerTargetTime.on('change', saveAutoStartRule);
-    $youtubeMatchType.on('change', saveAutoStartRule);
+    $youtubeMatchType.on('change', async function() {
+      // Save as global preference
+      await chrome.storage.local.set({ youtube_match_preference: $(this).val() });
+      await saveAutoStartRule();
+    });
     // Also save when duration inputs change (for duration mode)
     $hours.on('change', saveAutoStartRule);
     $minutes.on('change', saveAutoStartRule);

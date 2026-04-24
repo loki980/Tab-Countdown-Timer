@@ -12,13 +12,14 @@ A productivity-focused Chromium browser extension (Chrome, Edge, Brave) that hel
 - **Real-Time Feedback**: Extension badge shows remaining time (e.g., "1:23"), updates every second, turns red under 30 seconds, and grays when paused.
 - **Controls**: Pause/resume, cancel timers; supports multiple tabs simultaneously.
 - **Persistent Timers**: Running or paused timers are saved when tabs close and automatically restore when reopening the same URL (7-day expiration).
+- **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs. For YouTube, choose "This exact video" or "All YouTube videos". Supports duration mode (countdown from open) or time-of-day mode (expire at a specific time daily).
 - **Enhanced UI**: 
   - Preset buttons for common durations.
   - Keyboard arrows (up/down) and mouse wheel for quick adjustments; Shift+wheel accelerates minutes.
   - Handles input overflow/underflow (e.g., 70 minutes becomes 1h 10m).
   - ETA display and persists last-used values.
 - **Unobtrusive Design**: No auto-scheduling; user-initiated only for direct control.
-- **Tested & Stable**: Version 1.4.0 with Jest unit tests for core functionality.
+- **Tested & Stable**: Version 1.5.0 with Jest unit tests for core functionality.
 
 ## Installation
 
@@ -44,6 +45,18 @@ Follow the prompts to add the extension.
 5. **Pause/Resume**: Click the pause button; badge grays out when paused.
 6. **Cancel**: Click "Cancel timer" to stop and clear the badge.
 7. On expiry: Tab closes (default) or video pauses (YouTube); badge clears.
+
+### Auto-Start Timers
+1. Open the popup on any tab and check "Start timer when I visit this URL".
+2. Choose timer mode:
+   - **Duration mode**: Timer runs for the hours/minutes set above each time you open the URL.
+   - **Time-of-day mode**: Timer expires at a specific time (e.g., 10:00 PM) daily.
+3. For YouTube tabs, select "This exact video" or "All YouTube videos" from the dropdown.
+4. Rules save automatically when configured. Close the popup.
+5. When you open a matching URL, the timer starts automatically.
+6. To remove a rule, uncheck the checkbox on that page.
+
+**Rule precedence**: Specific YouTube video rules take priority over "All YouTube videos" rules, which take priority over exact URL rules.
 
 ## Screenshots
 *(Add visual aids here if available: e.g., popup UI, badge examples. Currently, no images in repo – consider adding.)*
@@ -137,7 +150,17 @@ Current coverage: Core utilities (e.g., `FormatDuration`), alarm handling, YouTu
 
 ## Changelog
 
-### v1.4.0 (Recent)
+### v1.5.0 (Recent)
+- **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs.
+  - Duration mode: Set a countdown from when the tab opens.
+  - Time-of-day mode: Set a specific time for the timer to expire (e.g., 10:00 PM daily).
+  - YouTube-specific: Choose "This exact video" or "All YouTube videos".
+  - Rule precedence: Specific video > All YouTube > Exact URL.
+- UI improvements: Combined hours/minutes into single row, auto-resizing popup.
+- Mouse wheel scrolling on time picker with position-based detection (hours/minutes/AM-PM sections).
+- Rules save automatically when checkbox is enabled.
+
+### v1.4.0
 - **Persistent Timers**: Timer state now persists by URL—closing a tab saves remaining time; reopening restores it.
 - YouTube URLs normalized to video ID only (playlist/index/timestamp params ignored for matching).
 - 7-day expiration on saved pause states.
