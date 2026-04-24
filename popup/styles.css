@@ -382,3 +382,14 @@ h2 {
     color: var(--text);
 }
 
+.status-message {
+    margin-top: 8px;
+    min-height: 0;
+    font-size: 0.85em;
+    color: var(--time-remaining-warning);
+}
+
+.status-message:empty {
+    display: none;
+}
+

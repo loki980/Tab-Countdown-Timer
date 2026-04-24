@@ -12,7 +12,7 @@ A productivity-focused Chromium browser extension (Chrome, Edge, Brave) that hel
 - **Real-Time Feedback**: Extension badge shows remaining time (e.g., "1:23"), updates every second, turns red under 30 seconds, and grays when paused.
 - **Controls**: Pause/resume, cancel timers; supports multiple tabs simultaneously.
 - **Persistent Timers**: Running or paused timers are saved when tabs close and automatically restore when reopening the same URL (7-day expiration).
-- **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs. For YouTube, choose "This exact video" or "All YouTube videos". Supports duration mode (countdown from open) or time-of-day mode (expire at a specific time daily).
+- **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs. For YouTube, choose "This exact video" or "All YouTube videos". Supports duration mode (countdown from open) or time-of-day mode (expires at a specific time when you next open the URL).
 - **Enhanced UI**: 
   - Preset buttons for common durations.
   - Keyboard arrows (up/down) and mouse wheel for quick adjustments; Shift+wheel accelerates minutes.
@@ -36,6 +36,16 @@ Follow the prompts to add the extension.
 4. Click "Load unpacked" and select the project root directory.
 5. The extension icon (hourglass) will appear in your toolbar.
 
+## Permissions
+
+The extension requests the following permissions in `manifest.json`:
+
+- **`alarms`** — Schedules the countdown expiry via `chrome.alarms`, which survives service worker suspension.
+- **`storage`** — Persists active timers, paused timers (by URL), auto-start rules, and user preferences in `chrome.storage.local`.
+- **`activeTab`** — Grants access to the current tab when the popup is opened so the user can start/pause/cancel a timer.
+- **`scripting`** — Injects a small script into YouTube watch pages to pause the video when a YouTube timer expires.
+- **`tabs`** — Needed to read the URL of newly created/navigated tabs to match against auto-start rules. `activeTab` alone only grants access when the popup is opened, which doesn't cover passive tab-creation/navigation events.
+
 ## Usage
 
 1. Click the extension icon (hourglass) in the browser toolbar to open the popup.
@@ -50,11 +60,13 @@ Follow the prompts to add the extension.
 1. Open the popup on any tab and check "Start timer when I visit this URL".
 2. Choose timer mode:
    - **Duration mode**: Timer runs for the hours/minutes set above each time you open the URL.
-   - **Time-of-day mode**: Timer expires at a specific time (e.g., 10:00 PM) daily.
+   - **Time-of-day mode**: Timer expires at the specified time (e.g., 10:00 PM) on days you open the matching URL.
 3. For YouTube tabs, select "This exact video" or "All YouTube videos" from the dropdown.
 4. Rules save automatically when configured. Close the popup.
 5. When you open a matching URL, the timer starts automatically.
 6. To remove a rule, uncheck the checkbox on that page.
+
+**Note**: Auto-start rules are event-driven, not scheduled. The timer re-arms each time you navigate to a matching URL (via tab creation or navigation); it does not fire on a clock/schedule if you never open the URL.
 
 **Rule precedence**: Specific YouTube video rules take priority over "All YouTube videos" rules, which take priority over exact URL rules.
 
@@ -153,7 +165,7 @@ Current coverage: Core utilities (e.g., `FormatDuration`), alarm handling, YouTu
 ### v1.5.0 (Recent)
 - **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs.
   - Duration mode: Set a countdown from when the tab opens.
-  - Time-of-day mode: Set a specific time for the timer to expire (e.g., 10:00 PM daily).
+  - Time-of-day mode: Set a specific time for the timer to expire (e.g., 10:00 PM) — re-arms each time you next open the matching URL.
   - YouTube-specific: Choose "This exact video" or "All YouTube videos".
   - Rule precedence: Specific video > All YouTube > Exact URL.
 - UI improvements: Combined hours/minutes into single row, auto-resizing popup.
