@@ -31,7 +31,6 @@
     "eslint": "^10.2.1",
     "globals": "^17.5.0",
     "jest": "^30.3.0",
-    "jest-chrome": "^0.8.0",
     "jest-environment-jsdom": "^30.3.0",
     "npm-check-updates": "^21.0.3"
   }
