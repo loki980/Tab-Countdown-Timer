@@ -268,6 +268,27 @@ describe('popup.js integration coverage', () => {
     expect($('#eta').text()).toBe('');
   });
 
+  test('a fresh 5-minute alarm renders as "5m 0s", not "4m 59s" or "5m 1s"', async() => {
+    await loadPopup({ alarm: { scheduledTime: Date.now() + 5 * 60 * 1000 } });
+    expect($('#timeRemaining').text()).toBe('0h 5m 0s');
+  });
+
+  test('displayTime ceils sub-second remainders so 4.5s renders as 5s', async() => {
+    await loadPopup({ alarm: { scheduledTime: Date.now() + 4500 } });
+    expect($('#timeRemaining').text()).toBe('0h 0m 5s');
+  });
+
+  test('countdown samples sub-second so display can\'t stick or skip', async() => {
+    const setSpy = jest.spyOn(global, 'setInterval');
+    await loadPopup({ alarm: { scheduledTime: Date.now() + 60000 } });
+    const countdownCalls = setSpy.mock.calls.filter(
+      ([, delay]) => delay !== 1000 // jest internal intervals run at 1s; ignore those
+    );
+    expect(countdownCalls.length).toBeGreaterThan(0);
+    expect(countdownCalls.every(([, delay]) => delay <= 250)).toBe(true);
+    setSpy.mockRestore();
+  });
+
   test('YouTube tabs reveal action options, default to pause, and persist selection', async() => {
     const { tab } = await loadPopup({
       url: 'https://www.youtube.com/watch?v=abc123'

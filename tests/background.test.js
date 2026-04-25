@@ -660,12 +660,11 @@ describe('Background Script Utility Functions', () => {
         let seconds = 0;
         seconds += Number($('#minutes')[0].value * 60);
         seconds += Number($('#hours')[0].value * 60 * 60);
-        seconds++;
         return seconds;
       };
 
       const result = getCloseTimeInSeconds();
-      expect(result).toBe(5401); // 1 hour + 30 minutes + 1 second
+      expect(result).toBe(5400); // 1 hour + 30 minutes
     });
   });
 
