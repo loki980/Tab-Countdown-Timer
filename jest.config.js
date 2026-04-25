@@ -1,6 +1,5 @@
 module.exports = {
   testEnvironment: 'jsdom',
-  setupFiles: ['jest-chrome'],
   setupFilesAfterEnv: ['./jest.setup.js', './tests/setup/chrome-mocks.js'],
   moduleFileExtensions: ['js', 'json'],
   testMatch: ['**/__tests__/**/*.js', '**/?(*.)+(spec|test).js'],
