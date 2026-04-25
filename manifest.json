@@ -22,6 +22,9 @@
         "scripting",
         "tabs"
     ],
+    "host_permissions": [
+        "*://*.youtube.com/*"
+    ],
     "content_security_policy": {
         "extension_pages": "script-src 'self'; object-src 'self'"
     }

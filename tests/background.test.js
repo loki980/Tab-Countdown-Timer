@@ -1364,3 +1364,16 @@ describe('Background Script Utility Functions', () => {
     });
   });
 });
+
+// pauseYouTubeVideo runs scripting.executeScript from the alarm listener with no
+// preceding user gesture, so activeTab is not granted. Without a YouTube host
+// permission the script silently fails and the video keeps playing past 10 PM.
+describe('Manifest host permissions', () => {
+  const manifest = require('../manifest.json');
+
+  test('declares YouTube host permission so auto-start pause works without activeTab', () => {
+    expect(manifest.host_permissions).toEqual(
+      expect.arrayContaining(['*://*.youtube.com/*'])
+    );
+  });
+});
