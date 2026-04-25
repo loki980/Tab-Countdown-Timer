@@ -6,52 +6,83 @@
     </head>
     <body>
         <div class="top-bar">
-            <h2>Tab Countdown Timer</h2>
+            <h2><span class="t-1">Tab</span> <span class="t-2">Countdown</span> <span class="t-3">Timer</span></h2>
         </div>
 
         <div class="content">
-            <div class="input-group">
-                <label for="hours">Hours:</label>
-                <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
-            </div>
-
-            <div class="input-group">
-                <label for="minutes">Minutes:</label>
-                <input type="number" id="minutes" name="minutes" value="30" min="0" step="1">
-            </div>
-
-            <div class="section-divider"></div>
-
-            <div class="preset-buttons">
-                <button class="preset-btn" data-minutes="5">5m</button>
-                <button class="preset-btn" data-minutes="15">15m</button>
-                <button class="preset-btn" data-minutes="30">30m</button>
-                <button class="preset-btn" data-hours="1">1h</button>
-            </div>
-
-            <div class="section-divider"></div>
-
-            <fieldset class="action-options">
-                <p class="fieldset-title">When time’s up</p>
-                <div class="radio-group">
-                    <input type="radio" id="closeTab" name="timerAction" value="close" checked>
-                    <label for="closeTab">Close Tab</label>
+            <div id="cancelDiv" class="running-state" style="display: none;">
+                <div class="countdown-card">
+                    <p id="timeRemaining"></p>
+                    <p id="eta" class="helper-caption"></p>
                 </div>
-                <div class="radio-group">
-                    <input type="radio" id="pauseVideo" name="timerAction" value="pause" disabled>
-                    <label for="pauseVideo">Pause Video</label>
-                </div>
-            </fieldset>
-
-            <button id="startbutton" class="button">Start timer</button>
-            
-            <div id="cancelDiv">
                 <div class="timer-controls">
-                    <button id="cancelbutton" class="button">Stop timer</button>
-                    <button id="pausebutton" class="button">Pause</button>
+                    <button id="pausebutton" class="button button--primary">Pause</button>
+                    <button id="cancelbutton" class="button button--ghost-danger">Stop timer</button>
                 </div>
-                <p id="timeRemaining"></p>
-                <p id="eta" class="helper-caption"></p>
+            </div>
+
+            <div class="config">
+                <div class="duration-row">
+                    <div class="duration-input">
+                        <label for="hours">Hours</label>
+                        <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
+                    </div>
+                    <div class="duration-input">
+                        <label for="minutes">Minutes</label>
+                        <input type="number" id="minutes" name="minutes" value="30" min="0" step="1">
+                    </div>
+                </div>
+
+                <div class="preset-buttons">
+                    <button class="preset-btn" data-minutes="5">5m</button>
+                    <button class="preset-btn" data-minutes="15">15m</button>
+                    <button class="preset-btn" data-minutes="30">30m</button>
+                    <button class="preset-btn" data-hours="1">1h</button>
+                </div>
+
+                <fieldset class="action-options card">
+                    <p class="fieldset-title">When time’s up</p>
+                    <div class="radio-group">
+                        <input type="radio" id="closeTab" name="timerAction" value="close" checked>
+                        <label for="closeTab">Close tab</label>
+                    </div>
+                    <div class="radio-group">
+                        <input type="radio" id="pauseVideo" name="timerAction" value="pause" disabled>
+                        <label for="pauseVideo">Pause video</label>
+                    </div>
+                </fieldset>
+
+                <button id="startbutton" class="button button--primary">Start timer</button>
+
+                <fieldset class="auto-start-options secondary-card" style="display: none;">
+                    <p class="fieldset-title fieldset-title--muted">Auto-start</p>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="autoStartEnabled" name="autoStartEnabled">
+                        <label for="autoStartEnabled">Start timer when I visit this URL</label>
+                    </div>
+
+                    <div class="timer-mode-options" style="display: none;">
+                        <div class="radio-group">
+                            <input type="radio" id="timerModeDuration" name="timerMode" value="duration" checked>
+                            <label for="timerModeDuration">Use duration above</label>
+                        </div>
+                        <div class="radio-group">
+                            <input type="radio" id="timerModeTime" name="timerMode" value="time">
+                            <label for="timerModeTime">Close/pause at:</label>
+                            <input type="time" id="timerTargetTime" value="22:00">
+                        </div>
+                    </div>
+
+                    <div class="youtube-match-options" style="display: none;">
+                        <label for="youtubeMatchType">Apply to:</label>
+                        <select id="youtubeMatchType" name="youtubeMatchType">
+                            <option value="video">This exact video</option>
+                            <option value="all">All YouTube videos</option>
+                        </select>
+                    </div>
+
+                    <div id="autoStartStatus" class="status-message" role="alert" aria-live="polite"></div>
+                </fieldset>
             </div>
         </div>
 

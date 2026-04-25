@@ -2,9 +2,9 @@
 const originalError = console.error;
 
 beforeAll(() => {
-    console.error = jest.fn();
+  console.error = jest.fn();
 });
 
 afterAll(() => {
-    console.error = originalError;
+  console.error = originalError;
 });
