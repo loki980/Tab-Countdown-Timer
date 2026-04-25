@@ -49,6 +49,15 @@ describe('Background Script Utility Functions', () => {
     test('formats very large durations correctly', () => {
       expect(FormatDuration(72000000)).toBe('20:00'); // 20 hours
     });
+
+    // Sub-second remainders ceil up so the badge agrees with the popup
+    // (which also uses Math.ceil).
+    test('ceils sub-second remainders to match popup display', () => {
+      expect(FormatDuration(299999)).toBe('5:00'); // 4m 59.999s -> 5:00
+      expect(FormatDuration(299500)).toBe('5:00'); // 4m 59.5s -> 5:00
+      expect(FormatDuration(299000)).toBe('4:59'); // exactly one full second below 5m
+      expect(FormatDuration(4500)).toBe('0:05');   // 4.5s -> 0:05
+    });
   });
 
   /**
