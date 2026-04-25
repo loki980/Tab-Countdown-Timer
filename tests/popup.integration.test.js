@@ -9,13 +9,15 @@ const flushPromises = () => new Promise(resolve => setTimeout(resolve, 0));
 const buildPopupDOM = () => {
   document.body.innerHTML = `
     <div class="content">
-      <div class="input-group">
-        <label for="hours">Hours</label>
-        <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
-      </div>
-      <div class="input-group">
-        <label for="minutes">Minutes</label>
-        <input type="number" id="minutes" name="minutes" value="0" min="0" max="59" step="1">
+      <div class="duration-row">
+        <div class="duration-input">
+          <label for="hours">Hours</label>
+          <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
+        </div>
+        <div class="duration-input">
+          <label for="minutes">Minutes</label>
+          <input type="number" id="minutes" name="minutes" value="0" min="0" max="59" step="1">
+        </div>
       </div>
       <div class="preset-buttons">
         <button class="preset-btn" data-minutes="5">5m</button>
@@ -33,6 +35,31 @@ const buildPopupDOM = () => {
           <label for="pauseVideo">Pause Video</label>
         </div>
       </div>
+      <fieldset class="auto-start-options" style="display: none;">
+        <p class="fieldset-title">Auto-start timer</p>
+        <div class="checkbox-group">
+          <input type="checkbox" id="autoStartEnabled" name="autoStartEnabled">
+          <label for="autoStartEnabled">Start timer when I visit this URL</label>
+        </div>
+        <div class="timer-mode-options" style="display: none;">
+          <div class="radio-group">
+            <input type="radio" id="timerModeDuration" name="timerMode" value="duration" checked>
+            <label for="timerModeDuration">Use duration above</label>
+          </div>
+          <div class="radio-group">
+            <input type="radio" id="timerModeTime" name="timerMode" value="time">
+            <label for="timerModeTime">Close/pause at:</label>
+            <input type="time" id="timerTargetTime" value="22:00" style="margin-left: 8px;">
+          </div>
+        </div>
+        <div class="youtube-match-options" style="display: none;">
+          <label for="youtubeMatchType">Apply to:</label>
+          <select id="youtubeMatchType" name="youtubeMatchType">
+            <option value="video">This exact video</option>
+            <option value="all">All YouTube videos</option>
+          </select>
+        </div>
+      </fieldset>
       <button id="startbutton" class="button">Start timer</button>
       <div id="cancelDiv" style="display: none;">
         <button id="cancelbutton" class="button">Cancel</button>
@@ -565,5 +592,789 @@ describe('popup.js integration coverage', () => {
     expect($('#eta').text()).toBe('');
     // Time remaining should be displayed
     expect($('#timeRemaining').text()).toMatch(/\d+h \d+m \d+s/);
+  });
+
+  test('auto-start options are shown for all tabs', async() => {
+    await loadPopup({ url: 'https://example.com' });
+    expect($('.auto-start-options').css('display')).not.toBe('none');
+  });
+
+  test('YouTube-specific options appear on YouTube tabs', async() => {
+    await loadPopup({ url: 'https://www.youtube.com/watch?v=abc123' });
+    expect($('.youtube-match-options').css('display')).not.toBe('none');
+  });
+
+  test('checking auto-start checkbox shows timer mode options and saves rule', async() => {
+    const savedRules = {};
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 111, url: 'https://example.com/page' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = savedRules;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (items.autostart_rules) Object.assign(savedRules, items.autostart_rules);
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Check the checkbox
+    $('#autoStartEnabled').prop('checked', true).trigger('change');
+    await flushPromises();
+
+    expect($('.timer-mode-options').css('display')).not.toBe('none');
+    expect(chrome.storage.local.set).toHaveBeenCalled();
+  });
+
+  test('unchecking auto-start checkbox removes the rule', async() => {
+    const ruleKey = 'url_' + encodeURIComponent('https://example.com/page');
+    const savedRules = { [ruleKey]: { type: 'exact_url', timerMode: 'duration' } };
+
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 222, url: 'https://example.com/page' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = { ...savedRules };
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (items.autostart_rules) {
+        Object.keys(savedRules).forEach(k => delete savedRules[k]);
+        Object.assign(savedRules, items.autostart_rules);
+      }
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Checkbox should be checked due to existing rule
+    expect($('#autoStartEnabled').prop('checked')).toBe(true);
+
+    // Uncheck the checkbox
+    $('#autoStartEnabled').prop('checked', false).trigger('change');
+    await flushPromises();
+
+    expect($('.timer-mode-options').css('display')).toBe('none');
+    expect(savedRules[ruleKey]).toBeUndefined();
+  });
+
+  test('existing auto-start rule pre-fills UI with time mode settings', async() => {
+    const ruleKey = 'url_' + encodeURIComponent('https://example.com/timed');
+    const savedRules = {
+      [ruleKey]: {
+        type: 'exact_url',
+        timerMode: 'time',
+        time: { hour: 21, minute: 30 },
+        action: 'close'
+      }
+    };
+
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 333, url: 'https://example.com/timed' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = savedRules;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    expect($('#autoStartEnabled').prop('checked')).toBe(true);
+    expect($('#timerModeTime').prop('checked')).toBe(true);
+    expect($('#timerTargetTime').val()).toBe('21:30');
+  });
+
+  test('YouTube all videos rule is matched correctly', async() => {
+    const savedRules = {
+      'youtube_all': {
+        type: 'youtube_all',
+        timerMode: 'duration',
+        duration: { hours: 1, minutes: 0 },
+        action: 'pause'
+      }
+    };
+
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 444, url: 'https://www.youtube.com/watch?v=newvideo123' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = savedRules;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    expect($('#autoStartEnabled').prop('checked')).toBe(true);
+    expect($('#youtubeMatchType').val()).toBe('all');
+    expect($('#hours').val()).toBe('1');
+  });
+
+  test('timer mode change saves the rule', async() => {
+    const savedRules = {};
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 555, url: 'https://example.com/mode' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = { ...savedRules };
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (items.autostart_rules) Object.assign(savedRules, items.autostart_rules);
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Enable auto-start
+    $('#autoStartEnabled').prop('checked', true).trigger('change');
+    await flushPromises();
+
+    // Change to time mode
+    $('#timerModeTime').prop('checked', true).trigger('change');
+    await flushPromises();
+
+    const ruleKey = 'url_' + encodeURIComponent('https://example.com/mode');
+    expect(savedRules[ruleKey]).toBeDefined();
+    expect(savedRules[ruleKey].timerMode).toBe('time');
+  });
+
+  test('target time change saves the rule', async() => {
+    const savedRules = {};
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 666, url: 'https://example.com/time' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = { ...savedRules };
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (items.autostart_rules) Object.assign(savedRules, items.autostart_rules);
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Enable auto-start and set to time mode
+    $('#autoStartEnabled').prop('checked', true).trigger('change');
+    await flushPromises();
+    $('#timerModeTime').prop('checked', true).trigger('change');
+    await flushPromises();
+
+    // Change the target time
+    $('#timerTargetTime').val('23:45').trigger('change');
+    await flushPromises();
+
+    const ruleKey = 'url_' + encodeURIComponent('https://example.com/time');
+    expect(savedRules[ruleKey].time).toEqual({ hour: 23, minute: 45 });
+  });
+
+  test('time picker wheel scrolling adjusts hours in first quarter', async() => {
+    await loadPopup();
+
+    const timeInput = document.getElementById('timerTargetTime');
+    timeInput.value = '14:30';
+
+    // Mock getBoundingClientRect
+    timeInput.getBoundingClientRect = () => ({ left: 0, width: 100 });
+
+    // Scroll up in the first quarter (hours section)
+    const wheelEvent = $.Event('wheel');
+    wheelEvent.originalEvent = {
+      deltaY: -1,
+      clientX: 10, // 10% from left = first quarter
+      preventDefault: jest.fn()
+    };
+
+    $('#timerTargetTime').trigger(wheelEvent);
+    expect(timeInput.value).toBe('15:30');
+  });
+
+  test('time picker wheel scrolling adjusts minutes in second quarter', async() => {
+    await loadPopup();
+
+    const timeInput = document.getElementById('timerTargetTime');
+    timeInput.value = '14:30';
+
+    timeInput.getBoundingClientRect = () => ({ left: 0, width: 100 });
+
+    // Scroll down in the second quarter (minutes section)
+    const wheelEvent = $.Event('wheel');
+    wheelEvent.originalEvent = {
+      deltaY: 1,
+      clientX: 35, // 35% from left = second quarter
+      preventDefault: jest.fn()
+    };
+
+    $('#timerTargetTime').trigger(wheelEvent);
+    expect(timeInput.value).toBe('14:29');
+  });
+
+  test('time picker wheel scrolling toggles AM/PM in third quarter', async() => {
+    await loadPopup();
+
+    const timeInput = document.getElementById('timerTargetTime');
+    timeInput.value = '14:30'; // 2:30 PM
+
+    timeInput.getBoundingClientRect = () => ({ left: 0, width: 100 });
+
+    // Scroll in the third quarter (AM/PM section)
+    const wheelEvent = $.Event('wheel');
+    wheelEvent.originalEvent = {
+      deltaY: 1,
+      clientX: 60, // 60% from left = third quarter
+      preventDefault: jest.fn()
+    };
+
+    $('#timerTargetTime').trigger(wheelEvent);
+    expect(timeInput.value).toBe('02:30'); // Toggled to AM
+  });
+
+  test('time picker wheel scrolling does nothing in fourth quarter (clock icon)', async() => {
+    await loadPopup();
+
+    const timeInput = document.getElementById('timerTargetTime');
+    timeInput.value = '14:30';
+
+    timeInput.getBoundingClientRect = () => ({ left: 0, width: 100 });
+
+    // Scroll in the fourth quarter (clock icon)
+    const wheelEvent = $.Event('wheel');
+    wheelEvent.originalEvent = {
+      deltaY: 1,
+      clientX: 85, // 85% from left = fourth quarter
+      preventDefault: jest.fn()
+    };
+
+    $('#timerTargetTime').trigger(wheelEvent);
+    expect(timeInput.value).toBe('14:30'); // Unchanged
+  });
+
+  test('time picker minute scrolling wraps from 59 to 0', async() => {
+    await loadPopup();
+
+    const timeInput = document.getElementById('timerTargetTime');
+    timeInput.value = '14:59';
+
+    timeInput.getBoundingClientRect = () => ({ left: 0, width: 100 });
+
+    const wheelEvent = $.Event('wheel');
+    wheelEvent.originalEvent = {
+      deltaY: -1, // scroll up
+      clientX: 35,
+      preventDefault: jest.fn()
+    };
+
+    $('#timerTargetTime').trigger(wheelEvent);
+    expect(timeInput.value).toBe('14:00');
+  });
+
+  test('time picker minute scrolling wraps from 0 to 59', async() => {
+    await loadPopup();
+
+    const timeInput = document.getElementById('timerTargetTime');
+    timeInput.value = '14:00';
+
+    timeInput.getBoundingClientRect = () => ({ left: 0, width: 100 });
+
+    const wheelEvent = $.Event('wheel');
+    wheelEvent.originalEvent = {
+      deltaY: 1, // scroll down
+      clientX: 35,
+      preventDefault: jest.fn()
+    };
+
+    $('#timerTargetTime').trigger(wheelEvent);
+    expect(timeInput.value).toBe('14:59');
+  });
+
+  test('time picker hour scrolling wraps within AM/PM period', async() => {
+    await loadPopup();
+
+    const timeInput = document.getElementById('timerTargetTime');
+    timeInput.value = '12:30'; // 12 PM
+
+    timeInput.getBoundingClientRect = () => ({ left: 0, width: 100 });
+
+    const wheelEvent = $.Event('wheel');
+    wheelEvent.originalEvent = {
+      deltaY: -1, // scroll up
+      clientX: 10,
+      preventDefault: jest.fn()
+    };
+
+    $('#timerTargetTime').trigger(wheelEvent);
+    expect(timeInput.value).toBe('13:30'); // 1 PM
+  });
+
+  test('existing rule with duration mode pre-fills hours and minutes', async() => {
+    const ruleKey = 'url_' + encodeURIComponent('https://example.com/duration');
+    const savedRules = {
+      [ruleKey]: {
+        type: 'exact_url',
+        timerMode: 'duration',
+        duration: { hours: 2, minutes: 15 },
+        action: 'close'
+      }
+    };
+
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 777, url: 'https://example.com/duration' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = savedRules;
+        if (key === 'hours') result[key] = 0;
+        if (key === 'minutes') result[key] = 30;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    expect($('#autoStartEnabled').prop('checked')).toBe(true);
+    expect($('#timerModeDuration').prop('checked')).toBe(true);
+    expect($('#hours').val()).toBe('2');
+    expect($('#minutes').val()).toBe('15');
+  });
+
+  test('start button saves auto-start rule when checkbox is checked', async() => {
+    const savedRules = {};
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 1001, url: 'https://example.com/startbtn' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = { ...savedRules };
+        if (key === 'hours') result[key] = 0;
+        if (key === 'minutes') result[key] = 15;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (items.autostart_rules) Object.assign(savedRules, items.autostart_rules);
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    chrome.storage.local.remove = jest.fn((keys, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Enable auto-start checkbox
+    $('#autoStartEnabled').prop('checked', true).trigger('change');
+    await flushPromises();
+
+    // Click start button
+    $('#startbutton').trigger('click');
+    await flushPromises();
+
+    const ruleKey = 'url_' + encodeURIComponent('https://example.com/startbtn');
+    expect(savedRules[ruleKey]).toBeDefined();
+    expect(savedRules[ruleKey].timerMode).toBe('duration');
+    expect(savedRules[ruleKey].url).toBe('https://example.com/startbtn');
+  });
+
+  test('start button saves YouTube video auto-start rule with video ID', async() => {
+    const savedRules = {};
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 1002, url: 'https://www.youtube.com/watch?v=testvid123' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = { ...savedRules };
+        if (key === 'hours') result[key] = 0;
+        if (key === 'minutes') result[key] = 10;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (items.autostart_rules) Object.assign(savedRules, items.autostart_rules);
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    chrome.storage.local.remove = jest.fn((keys, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Enable auto-start checkbox (should default to "This exact video")
+    $('#autoStartEnabled').prop('checked', true).trigger('change');
+    await flushPromises();
+
+    // Click start button
+    $('#startbutton').trigger('click');
+    await flushPromises();
+
+    const ruleKey = 'youtube_testvid123';
+    expect(savedRules[ruleKey]).toBeDefined();
+    expect(savedRules[ruleKey].type).toBe('youtube_video');
+    expect(savedRules[ruleKey].videoId).toBe('testvid123');
+  });
+
+  test('start button saves YouTube all videos auto-start rule', async() => {
+    const savedRules = {};
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 1003, url: 'https://www.youtube.com/watch?v=anothervid' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = { ...savedRules };
+        if (key === 'hours') result[key] = 0;
+        if (key === 'minutes') result[key] = 5;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (items.autostart_rules) Object.assign(savedRules, items.autostart_rules);
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    chrome.storage.local.remove = jest.fn((keys, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Enable auto-start and select "All YouTube videos"
+    $('#autoStartEnabled').prop('checked', true).trigger('change');
+    await flushPromises();
+    $('#youtubeMatchType').val('all').trigger('change');
+    await flushPromises();
+
+    // Click start button
+    $('#startbutton').trigger('click');
+    await flushPromises();
+
+    expect(savedRules['youtube_all']).toBeDefined();
+    expect(savedRules['youtube_all'].type).toBe('youtube_all');
+  });
+
+  test('start button saves auto-start rule with time mode', async() => {
+    const savedRules = {};
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 1004, url: 'https://example.com/timebtn' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = { ...savedRules };
+        if (key === 'hours') result[key] = 0;
+        if (key === 'minutes') result[key] = 30;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    chrome.storage.local.set.mockImplementation((items, callback) => {
+      if (items.autostart_rules) Object.assign(savedRules, items.autostart_rules);
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    chrome.storage.local.remove = jest.fn((keys, callback) => {
+      if (callback) callback();
+      return Promise.resolve();
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Enable auto-start and select time mode
+    $('#autoStartEnabled').prop('checked', true).trigger('change');
+    await flushPromises();
+    $('#timerModeTime').prop('checked', true).trigger('change');
+    await flushPromises();
+    $('#timerTargetTime').val('20:15').trigger('change');
+    await flushPromises();
+
+    // Click start button
+    $('#startbutton').trigger('click');
+    await flushPromises();
+
+    const ruleKey = 'url_' + encodeURIComponent('https://example.com/timebtn');
+    expect(savedRules[ruleKey]).toBeDefined();
+    expect(savedRules[ruleKey].timerMode).toBe('time');
+    expect(savedRules[ruleKey].time).toEqual({ hour: 20, minute: 15 });
+  });
+
+  test('YouTube specific video rule takes precedence over all videos rule', async() => {
+    const savedRules = {
+      'youtube_all': {
+        type: 'youtube_all',
+        timerMode: 'duration',
+        duration: { hours: 2, minutes: 0 },
+        action: 'pause'
+      },
+      'youtube_specificVid': {
+        type: 'youtube_video',
+        videoId: 'specificVid',
+        timerMode: 'time',
+        time: { hour: 22, minute: 0 },
+        action: 'pause'
+      }
+    };
+
+    jest.resetModules();
+    buildPopupDOM();
+    global.chrome = createChromeMocks();
+
+    const tab = { id: 888, url: 'https://www.youtube.com/watch?v=specificVid' };
+    chrome.tabs.query.mockImplementation((_query, callback) => {
+      if (callback) callback([tab]);
+      return Promise.resolve([tab]);
+    });
+
+    chrome.alarms.get.mockImplementation((_id, callback) => {
+      if (callback) callback(null);
+      return Promise.resolve(null);
+    });
+
+    chrome.storage.local.get.mockImplementation((keys, callback) => {
+      const result = {};
+      const keysArr = Array.isArray(keys) ? keys : [keys];
+      keysArr.forEach(key => {
+        if (key === 'autostart_rules') result[key] = savedRules;
+      });
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    delete require.cache[require.resolve('../background/background.js')];
+    delete require.cache[require.resolve('../popup/popup.js')];
+    require('../popup/popup.js').initPopup();
+    await flushPromises();
+
+    // Should use the specific video rule, not the all videos rule
+    expect($('#autoStartEnabled').prop('checked')).toBe(true);
+    expect($('#timerModeTime').prop('checked')).toBe(true);
+    expect($('#youtubeMatchType').val()).toBe('video');
   });
 });

@@ -11,13 +11,15 @@ describe('Popup Events', () => {
     // Setup complete DOM elements
     document.body.innerHTML = `
       <div class="content">
-        <div class="input-group">
-          <label for="hours">Hours:</label>
-          <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
-        </div>
-        <div class="input-group">
-          <label for="minutes">Minutes:</label>
-          <input type="number" id="minutes" name="minutes" value="30" min="0" max="59" step="1">
+        <div class="duration-row">
+          <div class="duration-input">
+            <label for="hours">Hours</label>
+            <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
+          </div>
+          <div class="duration-input">
+            <label for="minutes">Minutes</label>
+            <input type="number" id="minutes" name="minutes" value="30" min="0" max="59" step="1">
+          </div>
         </div>
         <div class="preset-buttons">
           <button class="preset-btn" data-minutes="5">5m</button>
@@ -35,6 +37,31 @@ describe('Popup Events', () => {
             <label for="pauseVideo">Pause Video</label>
           </div>
         </div>
+        <fieldset class="auto-start-options" style="display: none;">
+          <p class="fieldset-title">Auto-start timer</p>
+          <div class="checkbox-group">
+            <input type="checkbox" id="autoStartEnabled" name="autoStartEnabled">
+            <label for="autoStartEnabled">Start timer when I visit this URL</label>
+          </div>
+          <div class="timer-mode-options" style="display: none;">
+            <div class="radio-group">
+              <input type="radio" id="timerModeDuration" name="timerMode" value="duration" checked>
+              <label for="timerModeDuration">Use duration above</label>
+            </div>
+            <div class="radio-group">
+              <input type="radio" id="timerModeTime" name="timerMode" value="time">
+              <label for="timerModeTime">Close/pause at:</label>
+              <input type="time" id="timerTargetTime" value="22:00" style="margin-left: 8px;">
+            </div>
+          </div>
+          <div class="youtube-match-options" style="display: none;">
+            <label for="youtubeMatchType">Apply to:</label>
+            <select id="youtubeMatchType" name="youtubeMatchType">
+              <option value="video">This exact video</option>
+              <option value="all">All YouTube videos</option>
+            </select>
+          </div>
+        </fieldset>
         <button id="startbutton" class="button">Start countdown</button>
         <div id="cancelDiv" style="display: none;">
           <button id="cancelbutton" class="button">Cancel</button>

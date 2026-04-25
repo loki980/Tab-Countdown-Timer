@@ -49,6 +49,88 @@ const initPopup = function() {
     }
   }
 
+  // Stable URL form for rule keys. Drops fragment so #section variants of the
+  // same URL share one rule. Keeps query so ?id=1 vs ?id=2 stay distinct.
+  function normalizeUrlForRuleKey(urlObj) {
+    return urlObj.origin + urlObj.pathname + urlObj.search;
+  }
+
+  function getAutoStartRuleKey(url, matchType = 'exact') {
+    try {
+      const urlObj = new URL(url);
+      if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
+        if (matchType === 'all') return 'youtube_all';
+        return `youtube_${urlObj.searchParams.get('v')}`;
+      }
+      return `url_${encodeURIComponent(normalizeUrlForRuleKey(urlObj))}`;
+    } catch (e) {
+      return `url_${encodeURIComponent(url)}`;
+    }
+  }
+
+  // Returns matching rule with precedence: specific YouTube video > youtube_all > exact URL
+  async function getMatchingAutoStartRule(url) {
+    try {
+      const data = await chrome.storage.local.get(['autostart_rules']);
+      const rules = data.autostart_rules || {};
+      const urlObj = new URL(url);
+      if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
+        const videoKey = `youtube_${urlObj.searchParams.get('v')}`;
+        if (rules[videoKey]) return { key: videoKey, rule: rules[videoKey] };
+        if (rules['youtube_all']) return { key: 'youtube_all', rule: rules['youtube_all'] };
+      }
+      const urlKey = `url_${encodeURIComponent(normalizeUrlForRuleKey(urlObj))}`;
+      if (rules[urlKey]) return { key: urlKey, rule: rules[urlKey] };
+    } catch (error) {
+      console.error('Failed to match auto-start rule:', error);
+    }
+    return null;
+  }
+
+  async function writeAutoStartRule(ruleKey, rule) {
+    const data = await chrome.storage.local.get(['autostart_rules']);
+    const rules = data.autostart_rules || {};
+    rules[ruleKey] = rule;
+    await chrome.storage.local.set({ autostart_rules: rules });
+  }
+
+  async function deleteAutoStartRule(ruleKey) {
+    const data = await chrome.storage.local.get(['autostart_rules']);
+    const rules = data.autostart_rules || {};
+    delete rules[ruleKey];
+    await chrome.storage.local.set({ autostart_rules: rules });
+  }
+
+  function buildAutoStartRule({ url, isYouTube, matchType, timerMode, action, hours, minutes, timeValue }) {
+    const rule = {
+      type: isYouTube ? (matchType === 'all' ? 'youtube_all' : 'youtube_video') : 'exact_url',
+      timerMode,
+      action,
+      createdAt: Date.now()
+    };
+    if (isYouTube && matchType === 'video') {
+      try {
+        rule.videoId = new URL(url).searchParams.get('v');
+      } catch (e) {
+        rule.videoId = null;
+      }
+    } else if (!isYouTube) {
+      rule.url = url;
+    }
+    if (timerMode === 'duration') {
+      rule.duration = { hours: Number(hours) || 0, minutes: Number(minutes) || 0 };
+    } else {
+      const [hour, minute] = (timeValue || '').split(':').map(Number);
+      rule.time = { hour: Number.isFinite(hour) ? hour : 0, minute: Number.isFinite(minute) ? minute : 0 };
+    }
+    return rule;
+  }
+
+  function showAutoStartStatus(message) {
+    const $status = $('#autoStartStatus');
+    $status.text(message || '');
+  }
+
   const PAUSE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
   const $hours = $('#hours');
@@ -130,7 +212,11 @@ const initPopup = function() {
     const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-    $timeRemaining.text(hours + 'h ' + minutes + 'm ' + seconds + 's ');
+    $timeRemaining.html(
+      hours + '<span class="t-unit">h</span> ' +
+      minutes + '<span class="t-unit">m</span> ' +
+      seconds + '<span class="t-unit">s</span>'
+    );
 
     const totalSeconds = hours * 3600 + minutes * 60 + seconds;
     if (totalSeconds <= 30) {
@@ -267,7 +353,8 @@ const initPopup = function() {
     });
 
     // YouTube context: show action options and maintain caption/defaults
-    if (currentTab.url && currentTab.url.includes('youtube.com/watch')) {
+    const isYouTube = currentTab.url && currentTab.url.includes('youtube.com/watch');
+    if (isYouTube) {
       $('.action-options').show();
       $('#pauseVideo').prop('disabled', false);
 
@@ -288,6 +375,129 @@ const initPopup = function() {
         });
       });
     }
+
+    const $autoStartOptions = $('.auto-start-options');
+    const $autoStartEnabled = $('#autoStartEnabled');
+    const $timerModeOptions = $('.timer-mode-options');
+    const $youtubeMatchOptions = $('.youtube-match-options');
+    const $youtubeMatchType = $('#youtubeMatchType');
+    const $timerTargetTime = $('#timerTargetTime');
+
+    async function saveAutoStartRule() {
+      if (!$autoStartEnabled.prop('checked')) return;
+
+      const matchType = isYouTube ? $youtubeMatchType.val() : 'exact';
+      const timerMode = $('input[name="timerMode"]:checked').val();
+      const ruleKey = getAutoStartRuleKey(currentTab.url, matchType);
+
+      let action = 'close';
+      if (isYouTube) {
+        action = $('input[name="timerAction"]:checked').val() || 'pause';
+      }
+
+      const hoursVal = Number($hours[0].value) || 0;
+      const minutesVal = Number($minutes[0].value) || 0;
+
+      // Popup change handlers fire mid-edit with empty fields; don't persist 0h0m garbage rules.
+      if (timerMode === 'duration' && (hoursVal * 60 + minutesVal) <= 0) {
+        return;
+      }
+
+      const rule = buildAutoStartRule({
+        url: currentTab.url,
+        isYouTube,
+        matchType,
+        timerMode,
+        action,
+        hours: hoursVal,
+        minutes: minutesVal,
+        timeValue: $timerTargetTime.val()
+      });
+
+      try {
+        await writeAutoStartRule(ruleKey, rule);
+        showAutoStartStatus('');
+      } catch (error) {
+        console.error('Failed to save auto-start rule:', error);
+        showAutoStartStatus('Could not save auto-start rule.');
+      }
+    }
+
+    $autoStartOptions.show();
+
+    if (isYouTube) {
+      $youtubeMatchOptions.show();
+
+      try {
+        const matchPref = await chrome.storage.local.get(['youtube_match_preference']);
+        if (matchPref.youtube_match_preference) {
+          $youtubeMatchType.val(matchPref.youtube_match_preference);
+        }
+      } catch (error) {
+        console.error('Failed to load youtube_match_preference:', error);
+      }
+    }
+
+    const existingRule = await getMatchingAutoStartRule(currentTab.url);
+    if (existingRule) {
+      $autoStartEnabled.prop('checked', true);
+      $timerModeOptions.show();
+
+      const timerMode = existingRule.rule.timerMode || 'duration';
+      $(`input[name="timerMode"][value="${timerMode}"]`).prop('checked', true);
+
+      if (timerMode === 'duration' && existingRule.rule.duration) {
+        $hours.val(existingRule.rule.duration.hours || 0);
+        $minutes.val(existingRule.rule.duration.minutes || 0);
+      }
+
+      if (timerMode === 'time' && existingRule.rule.time) {
+        const hour = String(existingRule.rule.time.hour).padStart(2, '0');
+        const minute = String(existingRule.rule.time.minute).padStart(2, '0');
+        $timerTargetTime.val(`${hour}:${minute}`);
+      }
+
+      // Rules saved before youtube_match_preference existed didn't record match type; infer from the key shape.
+      if (isYouTube) {
+        try {
+          const matchPref = await chrome.storage.local.get(['youtube_match_preference']);
+          if (!matchPref.youtube_match_preference) {
+            const inferredPref = existingRule.key === 'youtube_all' ? 'all' : 'video';
+            $youtubeMatchType.val(inferredPref);
+          }
+        } catch (error) {
+          console.error('Failed to load youtube_match_preference:', error);
+        }
+      }
+    }
+
+    $autoStartEnabled.on('change', async function() {
+      if (this.checked) {
+        $timerModeOptions.show();
+        await saveAutoStartRule();
+      } else {
+        $timerModeOptions.hide();
+
+        const matchType = isYouTube ? $youtubeMatchType.val() : 'exact';
+        const ruleKey = getAutoStartRuleKey(currentTab.url, matchType);
+        try {
+          await deleteAutoStartRule(ruleKey);
+          showAutoStartStatus('');
+        } catch (error) {
+          console.error('Failed to delete auto-start rule:', error);
+          showAutoStartStatus('Could not remove auto-start rule.');
+        }
+      }
+    });
+
+    $('input[name="timerMode"]').on('change', saveAutoStartRule);
+    $timerTargetTime.on('change', saveAutoStartRule);
+    $youtubeMatchType.on('change', async function() {
+      await chrome.storage.local.set({ youtube_match_preference: $(this).val() });
+      await saveAutoStartRule();
+    });
+    $hours.on('change', saveAutoStartRule);
+    $minutes.on('change', saveAutoStartRule);
   });
 
   // Load last used alarm values and update Start enablement
@@ -335,6 +545,33 @@ const initPopup = function() {
 
       // Clear any existing pause state for this URL
       await chrome.storage.local.remove(normalizeUrlForStorage(tabs[0].url));
+
+      const autoStartEnabled = $('#autoStartEnabled').prop('checked');
+      if (autoStartEnabled) {
+        const isYouTube = tabs[0].url && tabs[0].url.includes('youtube.com/watch');
+        const matchType = isYouTube ? $('#youtubeMatchType').val() : 'exact';
+        const timerMode = $('input[name="timerMode"]:checked').val();
+        const ruleKey = getAutoStartRuleKey(tabs[0].url, matchType);
+
+        const rule = buildAutoStartRule({
+          url: tabs[0].url,
+          isYouTube,
+          matchType,
+          timerMode,
+          action,
+          hours: $hours[0].value,
+          minutes: $minutes[0].value,
+          timeValue: $('#timerTargetTime').val()
+        });
+
+        try {
+          await writeAutoStartRule(ruleKey, rule);
+          showAutoStartStatus('');
+        } catch (error) {
+          console.error('Failed to save auto-start rule on start:', error);
+          showAutoStartStatus('Could not save auto-start rule.');
+        }
+      }
 
       // Set initial badge color
       await chrome.action.setBadgeBackgroundColor({
@@ -412,6 +649,43 @@ const initPopup = function() {
     this.value = Number(this.value) + delta;
     fixOverflowAndUnderflows();
     updateStartButtonState();
+  });
+
+  // Mousewheel input for target time (hover over hours, minutes, or AM/PM to adjust)
+  $('#timerTargetTime').on('wheel', function(e) {
+    e.preventDefault();
+    const timeValue = this.value || '22:00';
+    let [hour, minute] = timeValue.split(':').map(Number);
+
+    const delta = (e.originalEvent.deltaY < 0) ? 1 : -1;
+
+    // Determine which section cursor is over (hours / minutes / AM-PM / clock icon)
+    const rect = this.getBoundingClientRect();
+    const mouseX = e.originalEvent.clientX;
+    const relativeX = (mouseX - rect.left) / rect.width;
+
+    if (relativeX < 0.25) {
+      // within same AM/PM period
+      const isPM = hour >= 12;
+      let hour12 = hour % 12 || 12;
+      hour12 += delta;
+      if (hour12 > 12) hour12 = 1;
+      if (hour12 < 1) hour12 = 12;
+      hour = isPM ? (hour12 % 12) + 12 : (hour12 % 12);
+    } else if (relativeX < 0.50) {
+      minute += delta;
+      if (minute >= 60) {
+        minute = 0;
+      } else if (minute < 0) {
+        minute = 59;
+      }
+    } else if (relativeX < 0.75) {
+      hour = (hour + 12) % 24;
+    }
+    // Fourth quarter (clock icon): do nothing
+
+    this.value = String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
+    $(this).trigger('change');
   });
 
   // Prevent non-numeric input and keep gating in sync
