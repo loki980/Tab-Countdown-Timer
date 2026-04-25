@@ -212,7 +212,11 @@ const initPopup = function() {
     const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-    $timeRemaining.text(hours + 'h ' + minutes + 'm ' + seconds + 's ');
+    $timeRemaining.html(
+      hours + '<span class="t-unit">h</span> ' +
+      minutes + '<span class="t-unit">m</span> ' +
+      seconds + '<span class="t-unit">s</span>'
+    );
 
     const totalSeconds = hours * 3600 + minutes * 60 + seconds;
     if (totalSeconds <= 30) {

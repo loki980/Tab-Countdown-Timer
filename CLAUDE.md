@@ -34,6 +34,26 @@ This is a Chrome/Edge/Brave browser extension (Manifest V3) that allows users to
 - Service workers (`background.js`) have no persistent state between wake-ups — use `chrome.storage.local` for persistence.
 - Always check if tabs/alarms exist before operating on them.
 
+### Popup UI Constraints (NEVER SCROLL)
+
+Chrome enforces a hard maximum of **600px tall × 800px wide** for extension popups; anything larger gets a browser-rendered scrollbar that we cannot remove. The popup must fit within this ceiling in its **worst-case state** — no scrollbar ever, in any condition.
+
+**Worst-case state** to verify against:
+- A timer is running (running-state block visible: countdown card + Pause/Stop row).
+- The active tab is a YouTube watch URL (`When time's up` card visible with both Close tab / Pause video radios).
+- `Auto-start` is enabled (checkbox checked).
+- `timerMode` is set to `time` (the time picker row + the `Close/pause at:` radio expansion is visible).
+- The YouTube match-type dropdown row is visible (`Apply to: …`).
+
+If a layout change can push that combination past ~580px (leave ~20px safety margin under the 600px ceiling), do NOT ship it. Options when content can't fit:
+
+1. **Tighten spacing first.** The spacing scale (`--s-1` … `--s-6`) and radius scale (`--r-sm`, `--r-md`) in `popup/styles.css` exist to make this controllable. Reduce gaps and paddings before touching structure.
+2. **Compress content shape.** E.g., inline label + control into one row instead of stacking; combine related radios into a segmented row.
+3. **Collapse non-critical sections behind a disclosure** (e.g., a `<details>` for `Auto-start` when not actively being edited) — only if 1 and 2 aren't enough.
+4. **Move advanced settings to `chrome.runtime.openOptionsPage()`** as a last resort.
+
+When verifying changes, load the extension and reproduce the worst-case state above. If you can't reproduce it in the moment, state in the response that the worst-case state was not visually verified rather than assuming it fits.
+
 ### Timer State Persistence
 
 Timers persist by normalized URL rather than tab ID, so state survives tab closure:

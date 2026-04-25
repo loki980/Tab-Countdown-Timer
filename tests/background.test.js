@@ -855,7 +855,7 @@ describe('Background Script Utility Functions', () => {
 
       await pauseYouTubeVideo(123);
 
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to pause YouTube video:', expect.any(Error));
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to pause YouTube video:', 'Injection failed');
 
       consoleSpy.mockRestore();
       executeSpy.mockRestore();

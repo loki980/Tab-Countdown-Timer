@@ -290,7 +290,7 @@ async function pauseYouTubeVideo(tabId) {
       'color': '#666666'
     });
   } catch (error) {
-    console.error('Failed to pause YouTube video:', error);
+    console.error('Failed to pause YouTube video:', error && error.message ? error.message : error);
   }
 }
 
