@@ -49,6 +49,15 @@ describe('Background Script Utility Functions', () => {
     test('formats very large durations correctly', () => {
       expect(FormatDuration(72000000)).toBe('20:00'); // 20 hours
     });
+
+    // Sub-second remainders ceil up so the badge agrees with the popup
+    // (which also uses Math.ceil).
+    test('ceils sub-second remainders to match popup display', () => {
+      expect(FormatDuration(299999)).toBe('5:00'); // 4m 59.999s -> 5:00
+      expect(FormatDuration(299500)).toBe('5:00'); // 4m 59.5s -> 5:00
+      expect(FormatDuration(299000)).toBe('4:59'); // exactly one full second below 5m
+      expect(FormatDuration(4500)).toBe('0:05');   // 4.5s -> 0:05
+    });
   });
 
   /**
@@ -660,12 +669,11 @@ describe('Background Script Utility Functions', () => {
         let seconds = 0;
         seconds += Number($('#minutes')[0].value * 60);
         seconds += Number($('#hours')[0].value * 60 * 60);
-        seconds++;
         return seconds;
       };
 
       const result = getCloseTimeInSeconds();
-      expect(result).toBe(5401); // 1 hour + 30 minutes + 1 second
+      expect(result).toBe(5400); // 1 hour + 30 minutes
     });
   });
 

@@ -314,12 +314,11 @@ describe('Popup Script Functionality', () => {
         let seconds = 0;
         seconds += Number(document.getElementById('minutes').value * 60);
         seconds += Number(document.getElementById('hours').value * 60 * 60);
-        seconds++;
         return seconds;
       };
 
       const result = getCloseTimeInSeconds();
-      expect(result).toBe(5401); // 1 hour (3600) + 30 minutes (1800) + 1 second
+      expect(result).toBe(5400); // 1 hour (3600) + 30 minutes (1800)
     });
 
     test('input validation should work correctly', () => {

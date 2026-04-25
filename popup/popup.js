@@ -189,11 +189,9 @@ const initPopup = function() {
   }
 
   function getCloseTimeInSeconds() {
-    // Keep +1s so the UI starts with a visible ticking second
     let seconds = 0;
     seconds += Number($minutes[0].value * 60);
     seconds += Number($hours[0].value * 60 * 60);
-    seconds++;
     return seconds;
   }
 
@@ -207,10 +205,12 @@ const initPopup = function() {
   }
 
   function displayTime(distance) {
-    const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)) + (days * 24);
-    const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((distance % (1000 * 60)) / 1000);
+    // Ceil so a freshly-set N-minute timer reads "Nm 0s" until a full second
+    // has elapsed, instead of varying with sub-second render jitter.
+    const totalSeconds = Math.max(0, Math.ceil(distance / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
 
     $timeRemaining.html(
       hours + '<span class="t-unit">h</span> ' +
@@ -218,7 +218,6 @@ const initPopup = function() {
       seconds + '<span class="t-unit">s</span>'
     );
 
-    const totalSeconds = hours * 3600 + minutes * 60 + seconds;
     if (totalSeconds <= 30) {
       $timeRemaining.addClass('warning');
     } else {
@@ -262,9 +261,10 @@ const initPopup = function() {
       }
     }
 
-    // Initial update and interval
+    // Sub-second sampling so interval drift can't push transitions a whole
+    // second late and make the display stick or skip.
     updateCountdown();
-    window.countdownInterval = setInterval(updateCountdown, 1000);
+    window.countdownInterval = setInterval(updateCountdown, 250);
 
     // Update ETA only if countdown is in the future (and not paused)
     if (!isPaused && countDownDate && countDownDate > Date.now()) {

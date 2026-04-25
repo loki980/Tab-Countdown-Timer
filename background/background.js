@@ -263,12 +263,22 @@ function FormatDuration(d) {
     return '?';
   }
 
-  const divisor = d < 3600000 ? [60000, 1000] : [3600000, 60000];
-
+  // Ceil to keep the badge in lock-step with the popup, which also rounds
+  // sub-second remainders up — otherwise the two displays show different
+  // values for the same moment.
+  const totalSeconds = Math.ceil(d / 1000);
   function pad(x) {
     return x < 10 ? '0' + x : x;
   }
-  return Math.floor(d / divisor[0]) + ':' + pad(Math.floor((d % divisor[0]) / divisor[1]));
+
+  if (totalSeconds < 3600) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return minutes + ':' + pad(seconds);
+  }
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  return hours + ':' + pad(minutes);
 }
 
 // Function to pause YouTube video
@@ -401,8 +411,9 @@ async function UpdateBadges() {
           'text': description
         });
 
-        // Update badge color based on time remaining
-        const secondsRemaining = Math.floor(timeRemaining / 1000);
+        // Match the popup's warning threshold by ceiling sub-second
+        // remainders the same way it does.
+        const secondsRemaining = Math.ceil(timeRemaining / 1000);
         const badgeColor = secondsRemaining <= 30 ? '#ff0000' : '#666666';
         ChromeAPIWrapper.action.setBadgeBackgroundColor({
           'tabId': tabId,
@@ -417,7 +428,7 @@ async function UpdateBadges() {
     console.error('Failed to get alarms:', error);
   }
 }
-setInterval(UpdateBadges, 1000);
+setInterval(UpdateBadges, 250);
 
 // Function to calculate milliseconds until next 10 PM
 function getMillisecondsUntil10PM() {
