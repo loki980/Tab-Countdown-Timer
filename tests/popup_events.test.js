@@ -14,11 +14,19 @@ describe('Popup Events', () => {
         <div class="duration-row">
           <div class="duration-input">
             <label for="hours">Hours</label>
-            <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
+            <div class="duration-input__field">
+              <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
+              <button type="button" class="duration-step duration-step--up" tabindex="-1"></button>
+              <button type="button" class="duration-step duration-step--down" tabindex="-1"></button>
+            </div>
           </div>
           <div class="duration-input">
             <label for="minutes">Minutes</label>
-            <input type="number" id="minutes" name="minutes" value="30" min="0" max="59" step="1">
+            <div class="duration-input__field">
+              <input type="number" id="minutes" name="minutes" value="30" min="0" max="59" step="1">
+              <button type="button" class="duration-step duration-step--up" tabindex="-1"></button>
+              <button type="button" class="duration-step duration-step--down" tabindex="-1"></button>
+            </div>
           </div>
         </div>
         <div class="preset-buttons">
@@ -250,9 +258,25 @@ describe('Popup Events', () => {
     await loadPopup();
     const btn5m = $('.preset-btn[data-minutes="5"]');
     const minutes = $('#minutes');
-    
+
     btn5m.click();
     expect(minutes.val()).toBe('5');
+  });
+
+  test('Duration stepper buttons increment and decrement', async () => {
+    await loadPopup();
+    const $minutes = $('#minutes');
+    const $minutesField = $minutes.parent();
+    const $stepUp = $minutesField.find('.duration-step--up');
+    const $stepDown = $minutesField.find('.duration-step--down');
+
+    $minutes.val('30');
+    $stepUp.click();
+    expect($minutes.val()).toBe('31');
+
+    $stepDown.click();
+    $stepDown.click();
+    expect($minutes.val()).toBe('29');
   });
   
   test('YouTube Actions Persistence', async () => {

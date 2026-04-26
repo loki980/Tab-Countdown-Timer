@@ -520,6 +520,19 @@ const initPopup = function() {
     updateStartButtonState();
   });
 
+  // Duration stepper buttons (hover-revealed up/down arrows)
+  $('.duration-step').on('click', function() {
+    const $input = $(this).siblings('input[type="number"]');
+    if ($(this).hasClass('duration-step--up')) {
+      $input[0].stepUp();
+    } else {
+      $input[0].stepDown();
+    }
+    fixOverflowAndUnderflows();
+    updateStartButtonState();
+    $input.trigger('change');
+  });
+
   // Create/update tab countdown timer when the user sets one
   $('#startbutton').on('click', async function(e) {
     e.preventDefault();
