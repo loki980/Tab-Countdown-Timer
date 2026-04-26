@@ -25,11 +25,27 @@
                 <div class="duration-row">
                     <div class="duration-input">
                         <label for="hours">Hours</label>
-                        <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
+                        <div class="duration-input__field">
+                            <input type="number" id="hours" name="hours" value="0" min="0" max="24" step="1">
+                            <button type="button" class="duration-step duration-step--up" tabindex="-1" aria-label="Increase hours">
+                                <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M5 0 L10 6 L0 6 Z" fill="currentColor"/></svg>
+                            </button>
+                            <button type="button" class="duration-step duration-step--down" tabindex="-1" aria-label="Decrease hours">
+                                <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M0 0 L10 0 L5 6 Z" fill="currentColor"/></svg>
+                            </button>
+                        </div>
                     </div>
                     <div class="duration-input">
                         <label for="minutes">Minutes</label>
-                        <input type="number" id="minutes" name="minutes" value="30" min="0" step="1">
+                        <div class="duration-input__field">
+                            <input type="number" id="minutes" name="minutes" value="30" min="0" step="1">
+                            <button type="button" class="duration-step duration-step--up" tabindex="-1" aria-label="Increase minutes">
+                                <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M5 0 L10 6 L0 6 Z" fill="currentColor"/></svg>
+                            </button>
+                            <button type="button" class="duration-step duration-step--down" tabindex="-1" aria-label="Decrease minutes">
+                                <svg viewBox="0 0 10 6" aria-hidden="true"><path d="M0 0 L10 0 L5 6 Z" fill="currentColor"/></svg>
+                            </button>
+                        </div>
                     </div>
                 </div>
 
