@@ -34,16 +34,65 @@ const initPopup = function() {
   $('#cancelDiv').hide();
   $('.action-options').hide();
 
-  // URL normalization for persistent pause state storage
-  function normalizeUrlForStorage(url) {
+  const TWITCH_NON_VIDEO_ROUTES = new Set([
+    'directory', 'p', 'subscriptions', 'following', 'search', 'settings',
+    'team', 'turbo', 'jobs', 'wallet', 'inventory', 'drops', 'downloads',
+    'broadcast', 'logout', 'login', 'signup', 'redeem'
+  ]);
+
+  // Mirrors background.js getVideoSiteContext. Identifies tabs hosting a
+  // pausable HTML5 video on a recognized site (YouTube, Twitch) so the popup
+  // can offer per-content auto-start rules and the "pause video" action.
+  function getVideoSiteContext(url) {
     try {
       const urlObj = new URL(url);
-      // For YouTube, only keep the video ID - other params (t, list, index) can vary
-      if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
-        const videoId = urlObj.searchParams.get('v');
-        return 'paused_youtube_' + videoId;
+      if (urlObj.hostname.includes('youtube.com')
+        && urlObj.pathname === '/watch'
+        && urlObj.searchParams.has('v')) {
+        const id = urlObj.searchParams.get('v');
+        return {
+          site: 'youtube',
+          id,
+          storageKey: 'paused_youtube_' + id,
+          ruleKeyExact: 'youtube_' + id,
+          ruleKeyAll: 'youtube_all'
+        };
       }
-      return 'paused_' + encodeURIComponent(urlObj.href);
+      if (urlObj.hostname.includes('twitch.tv')) {
+        const path = urlObj.pathname.replace(/^\/+|\/+$/g, '');
+        if (!path) return null;
+        const segments = path.split('/');
+        const first = segments[0].toLowerCase();
+        if (TWITCH_NON_VIDEO_ROUTES.has(first)) return null;
+        const id = first === 'videos' && segments[1]
+          ? 'videos_' + segments[1]
+          : first;
+        return {
+          site: 'twitch',
+          id,
+          storageKey: 'paused_twitch_' + id,
+          ruleKeyExact: 'twitch_' + id,
+          ruleKeyAll: 'twitch_all'
+        };
+      }
+    } catch (e) {
+      // fallthrough
+    }
+    return null;
+  }
+
+  // Per-site copy for the auto-start "Apply to" dropdown.
+  const VIDEO_SITE_LABELS = {
+    youtube: { exact: 'This exact video', all: 'All YouTube videos' },
+    twitch: { exact: 'This channel/video', all: 'All Twitch streams' }
+  };
+
+  // URL normalization for persistent pause state storage
+  function normalizeUrlForStorage(url) {
+    const ctx = getVideoSiteContext(url);
+    if (ctx) return ctx.storageKey;
+    try {
+      return 'paused_' + encodeURIComponent(new URL(url).href);
     } catch (e) {
       return 'paused_' + encodeURIComponent(url);
     }
@@ -56,29 +105,29 @@ const initPopup = function() {
   }
 
   function getAutoStartRuleKey(url, matchType = 'exact') {
+    const ctx = getVideoSiteContext(url);
+    if (ctx) {
+      return matchType === 'all' ? ctx.ruleKeyAll : ctx.ruleKeyExact;
+    }
     try {
-      const urlObj = new URL(url);
-      if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
-        if (matchType === 'all') return 'youtube_all';
-        return `youtube_${urlObj.searchParams.get('v')}`;
-      }
-      return `url_${encodeURIComponent(normalizeUrlForRuleKey(urlObj))}`;
+      return `url_${encodeURIComponent(normalizeUrlForRuleKey(new URL(url)))}`;
     } catch (e) {
       return `url_${encodeURIComponent(url)}`;
     }
   }
 
-  // Returns matching rule with precedence: specific YouTube video > youtube_all > exact URL
+  // Returns matching rule with precedence: specific video-site content >
+  // per-site "all" rule > exact URL.
   async function getMatchingAutoStartRule(url) {
     try {
       const data = await chrome.storage.local.get(['autostart_rules']);
       const rules = data.autostart_rules || {};
-      const urlObj = new URL(url);
-      if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
-        const videoKey = `youtube_${urlObj.searchParams.get('v')}`;
-        if (rules[videoKey]) return { key: videoKey, rule: rules[videoKey] };
-        if (rules['youtube_all']) return { key: 'youtube_all', rule: rules['youtube_all'] };
+      const ctx = getVideoSiteContext(url);
+      if (ctx) {
+        if (rules[ctx.ruleKeyExact]) return { key: ctx.ruleKeyExact, rule: rules[ctx.ruleKeyExact] };
+        if (rules[ctx.ruleKeyAll]) return { key: ctx.ruleKeyAll, rule: rules[ctx.ruleKeyAll] };
       }
+      const urlObj = new URL(url);
       const urlKey = `url_${encodeURIComponent(normalizeUrlForRuleKey(urlObj))}`;
       if (rules[urlKey]) return { key: urlKey, rule: rules[urlKey] };
     } catch (error) {
@@ -101,20 +150,24 @@ const initPopup = function() {
     await chrome.storage.local.set({ autostart_rules: rules });
   }
 
-  function buildAutoStartRule({ url, isYouTube, matchType, timerMode, action, hours, minutes, timeValue }) {
+  function buildAutoStartRule({ url, videoSite, matchType, timerMode, action, hours, minutes, timeValue }) {
+    const site = videoSite ? videoSite.site : null;
     const rule = {
-      type: isYouTube ? (matchType === 'all' ? 'youtube_all' : 'youtube_video') : 'exact_url',
+      type: site
+        ? (matchType === 'all' ? `${site}_all` : `${site}_video`)
+        : 'exact_url',
       timerMode,
       action,
       createdAt: Date.now()
     };
-    if (isYouTube && matchType === 'video') {
-      try {
-        rule.videoId = new URL(url).searchParams.get('v');
-      } catch (e) {
-        rule.videoId = null;
+    if (videoSite && matchType === 'video') {
+      // YouTube rules historically used `videoId`; keep that field for
+      // backward compatibility, and add `siteId` as the generic equivalent.
+      rule.siteId = videoSite.id;
+      if (site === 'youtube') {
+        rule.videoId = videoSite.id;
       }
-    } else if (!isYouTube) {
+    } else if (!videoSite) {
       rule.url = url;
     }
     if (timerMode === 'duration') {
@@ -352,9 +405,10 @@ const initPopup = function() {
       }
     });
 
-    // YouTube context: show action options and maintain caption/defaults
-    const isYouTube = currentTab.url && currentTab.url.includes('youtube.com/watch');
-    if (isYouTube) {
+    // Detect video-site tabs (YouTube watch pages, Twitch channels/VODs)
+    // so we can offer "Pause video" and per-content auto-start rules.
+    const videoSite = getVideoSiteContext(currentTab.url);
+    if (videoSite) {
       $('.action-options').show();
       $('#pauseVideo').prop('disabled', false);
 
@@ -363,7 +417,7 @@ const initPopup = function() {
         if (savedAction) {
           $(`input[name="timerAction"][value="${savedAction}"]`).prop('checked', true);
         } else {
-          // Default to "pause" for YouTube tabs
+          // Default to "pause" on video-site tabs.
           $('input[name="timerAction"][value="pause"]').prop('checked', true);
         }
       });
@@ -386,12 +440,12 @@ const initPopup = function() {
     async function saveAutoStartRule() {
       if (!$autoStartEnabled.prop('checked')) return;
 
-      const matchType = isYouTube ? $youtubeMatchType.val() : 'exact';
+      const matchType = videoSite ? $youtubeMatchType.val() : 'exact';
       const timerMode = $('input[name="timerMode"]:checked').val();
       const ruleKey = getAutoStartRuleKey(currentTab.url, matchType);
 
       let action = 'close';
-      if (isYouTube) {
+      if (videoSite) {
         action = $('input[name="timerAction"]:checked').val() || 'pause';
       }
 
@@ -405,7 +459,7 @@ const initPopup = function() {
 
       const rule = buildAutoStartRule({
         url: currentTab.url,
-        isYouTube,
+        videoSite,
         matchType,
         timerMode,
         action,
@@ -425,7 +479,13 @@ const initPopup = function() {
 
     $autoStartOptions.show();
 
-    if (isYouTube) {
+    if (videoSite) {
+      // Adapt the dropdown copy to the detected site (YouTube vs. Twitch).
+      const labels = VIDEO_SITE_LABELS[videoSite.site];
+      if (labels) {
+        $youtubeMatchType.find('option[value="video"]').text(labels.exact);
+        $youtubeMatchType.find('option[value="all"]').text(labels.all);
+      }
       $youtubeMatchOptions.show();
 
       try {
@@ -458,11 +518,11 @@ const initPopup = function() {
       }
 
       // Rules saved before youtube_match_preference existed didn't record match type; infer from the key shape.
-      if (isYouTube) {
+      if (videoSite) {
         try {
           const matchPref = await chrome.storage.local.get(['youtube_match_preference']);
           if (!matchPref.youtube_match_preference) {
-            const inferredPref = existingRule.key === 'youtube_all' ? 'all' : 'video';
+            const inferredPref = existingRule.key === videoSite.ruleKeyAll ? 'all' : 'video';
             $youtubeMatchType.val(inferredPref);
           }
         } catch (error) {
@@ -478,7 +538,7 @@ const initPopup = function() {
       } else {
         $timerModeOptions.hide();
 
-        const matchType = isYouTube ? $youtubeMatchType.val() : 'exact';
+        const matchType = videoSite ? $youtubeMatchType.val() : 'exact';
         const ruleKey = getAutoStartRuleKey(currentTab.url, matchType);
         try {
           await deleteAutoStartRule(ruleKey);
@@ -543,8 +603,9 @@ const initPopup = function() {
       const tabId = parseInt(tabs[0].id);
       let action = 'close';  // Default action
 
-      // Only check radio if it's a YouTube tab
-      if (tabs[0].url && tabs[0].url.includes('youtube.com/watch')) {
+      // Only check the radio for tabs on a recognized video site (YouTube, Twitch).
+      const videoSiteForStart = getVideoSiteContext(tabs[0].url);
+      if (videoSiteForStart) {
         action = $('input[name="timerAction"]:checked').val();
       }
 
@@ -561,14 +622,13 @@ const initPopup = function() {
 
       const autoStartEnabled = $('#autoStartEnabled').prop('checked');
       if (autoStartEnabled) {
-        const isYouTube = tabs[0].url && tabs[0].url.includes('youtube.com/watch');
-        const matchType = isYouTube ? $('#youtubeMatchType').val() : 'exact';
+        const matchType = videoSiteForStart ? $('#youtubeMatchType').val() : 'exact';
         const timerMode = $('input[name="timerMode"]:checked').val();
         const ruleKey = getAutoStartRuleKey(tabs[0].url, matchType);
 
         const rule = buildAutoStartRule({
           url: tabs[0].url,
-          isYouTube,
+          videoSite: videoSiteForStart,
           matchType,
           timerMode,
           action,

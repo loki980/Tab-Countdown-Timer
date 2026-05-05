@@ -53,19 +53,22 @@ jobs:
             "TabCountdownTimer_${{ steps.get_version.outputs.version }}.zip" \
             --clobber
 
-      - name: Upload to Chrome Web Store
-        uses: wdzeng/chrome-extension@v1
-        with:
-          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
-          zip-path: TabCountdownTimer_${{ steps.get_version.outputs.version }}.zip
-          client-id: ${{ secrets.CHROME_CLIENT_ID }}
-          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
-          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
-
-      - name: Upload to Edge Add-ons
-        uses: wdzeng/edge-addon@v2
-        with:
-          product-id: ${{ secrets.EDGE_PRODUCT_ID }}
-          zip-path: TabCountdownTimer_${{ steps.get_version.outputs.version }}.zip
-          api-key: ${{ secrets.EDGE_API_KEY }}
-          client-id: ${{ secrets.EDGE_CLIENT_ID }}
+      # Auto-publish to extension stores is intentionally disabled. Upload the
+      # zip from the GitHub release manually until we re-enable these steps.
+      #
+      # - name: Upload to Chrome Web Store
+      #   uses: wdzeng/chrome-extension@v1
+      #   with:
+      #     extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+      #     zip-path: TabCountdownTimer_${{ steps.get_version.outputs.version }}.zip
+      #     client-id: ${{ secrets.CHROME_CLIENT_ID }}
+      #     client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+      #     refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      #
+      # - name: Upload to Edge Add-ons
+      #   uses: wdzeng/edge-addon@v2
+      #   with:
+      #     product-id: ${{ secrets.EDGE_PRODUCT_ID }}
+      #     zip-path: TabCountdownTimer_${{ steps.get_version.outputs.version }}.zip
+      #     api-key: ${{ secrets.EDGE_API_KEY }}
+      #     client-id: ${{ secrets.EDGE_CLIENT_ID }}
