@@ -7,7 +7,8 @@ const {
   getMillisecondsUntil10PM,
   setYouTubeTimer,
   checkAndSetYouTubeTimers,
-  pauseYouTubeVideo
+  pauseVideoOnPage,
+  getVideoSiteContext
 } = require('../background/background.js');
 
 const alarmListeners = chrome.alarms.onAlarm.addListener.mock.calls.map(call => call[0]);
@@ -600,12 +601,12 @@ describe('Background Script Utility Functions', () => {
       // and real Chrome extension testing would require a full extension environment
     });
 
-    test('pauseYouTubeVideo triggers script execution and badge reset', async() => {
+    test('pauseVideoOnPage triggers script execution and badge reset', async() => {
       const executeSpy = jest.spyOn(ChromeAPIWrapper.scripting, 'executeScript').mockResolvedValue([]);
       const setBadgeTextSpy = jest.spyOn(ChromeAPIWrapper.action, 'setBadgeText').mockResolvedValue();
       const setColorSpy = jest.spyOn(ChromeAPIWrapper.action, 'setBadgeBackgroundColor');
 
-      await pauseYouTubeVideo(55);
+      await pauseVideoOnPage(55);
 
       expect(executeSpy).toHaveBeenCalledWith(expect.objectContaining({ target: { tabId: 55 } }));
       expect(setBadgeTextSpy).toHaveBeenCalledWith({ tabId: 55, text: '' });
@@ -708,6 +709,29 @@ describe('Background Script Utility Functions', () => {
       const removeSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'remove').mockResolvedValue();
 
       await primaryAlarmHandler({ name: '101' });
+
+      expect(executeSpy).toHaveBeenCalled();
+      expect(removeSpy).not.toHaveBeenCalled();
+
+      existsSpy.mockRestore();
+      getSpy.mockRestore();
+      storageSpy.mockRestore();
+      executeSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
+
+    test('pauses Twitch tabs when action is pause', async() => {
+      const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockResolvedValue(true);
+      const getSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'get').mockResolvedValue({
+        id: 102,
+        url: 'https://www.twitch.tv/somechannel'
+      });
+      const storageSpy = jest.spyOn(ChromeAPIWrapper.storage.local, 'get')
+        .mockResolvedValue({ '102_action': 'pause' });
+      const executeSpy = jest.spyOn(ChromeAPIWrapper.scripting, 'executeScript').mockResolvedValue([]);
+      const removeSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'remove').mockResolvedValue();
+
+      await primaryAlarmHandler({ name: '102' });
 
       expect(executeSpy).toHaveBeenCalled();
       expect(removeSpy).not.toHaveBeenCalled();
@@ -855,15 +879,15 @@ describe('Background Script Utility Functions', () => {
     });
   });
 
-  describe('pauseYouTubeVideo error handling', () => {
+  describe('pauseVideoOnPage error handling', () => {
     test('logs error when script execution fails', async() => {
       const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
       const executeSpy = jest.spyOn(ChromeAPIWrapper.scripting, 'executeScript')
         .mockRejectedValue(new Error('Injection failed'));
 
-      await pauseYouTubeVideo(123);
+      await pauseVideoOnPage(123);
 
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to pause YouTube video:', 'Injection failed');
+      expect(consoleSpy).toHaveBeenCalledWith('Failed to pause video on page:', 'Injection failed');
 
       consoleSpy.mockRestore();
       executeSpy.mockRestore();
@@ -957,6 +981,40 @@ describe('Background Script Utility Functions', () => {
         });
 
         const result = await checkAutoStartRule('https://www.youtube.com/watch?v=specific');
+        expect(result).toEqual(specificRule);
+      });
+
+      test('matches Twitch channel-specific rule', async() => {
+        const rule = { type: 'twitch_video', siteId: 'shroud' };
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({
+          autostart_rules: { 'twitch_shroud': rule }
+        });
+
+        const result = await checkAutoStartRule('https://www.twitch.tv/Shroud');
+        expect(result).toEqual(rule);
+      });
+
+      test('matches Twitch all-streams rule when no specific channel rule', async() => {
+        const rule = { type: 'twitch_all' };
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({
+          autostart_rules: { 'twitch_all': rule }
+        });
+
+        const result = await checkAutoStartRule('https://www.twitch.tv/somenewchannel');
+        expect(result).toEqual(rule);
+      });
+
+      test('Twitch specific channel rule beats twitch_all', async() => {
+        const allRule = { type: 'twitch_all', timerMode: 'duration' };
+        const specificRule = { type: 'twitch_video', siteId: 'pokimane', timerMode: 'time' };
+        jest.spyOn(ChromeAPIWrapper.storage.local, 'get').mockResolvedValue({
+          autostart_rules: {
+            'twitch_all': allRule,
+            'twitch_pokimane': specificRule
+          }
+        });
+
+        const result = await checkAutoStartRule('https://www.twitch.tv/pokimane');
         expect(result).toEqual(specificRule);
       });
 
@@ -1373,9 +1431,9 @@ describe('Background Script Utility Functions', () => {
   });
 });
 
-// pauseYouTubeVideo runs scripting.executeScript from the alarm listener with no
-// preceding user gesture, so activeTab is not granted. Without a YouTube host
-// permission the script silently fails and the video keeps playing past 10 PM.
+// pauseVideoOnPage runs scripting.executeScript from the alarm listener with no
+// preceding user gesture, so activeTab is not granted. Without a host
+// permission the script silently fails and the video keeps playing past the timer.
 describe('Manifest host permissions', () => {
   const manifest = require('../manifest.json');
 
@@ -1383,5 +1441,62 @@ describe('Manifest host permissions', () => {
     expect(manifest.host_permissions).toEqual(
       expect.arrayContaining(['*://*.youtube.com/*'])
     );
+  });
+
+  test('declares Twitch host permission so auto-start pause works without activeTab', () => {
+    expect(manifest.host_permissions).toEqual(
+      expect.arrayContaining(['*://*.twitch.tv/*'])
+    );
+  });
+});
+
+describe('getVideoSiteContext', () => {
+  test('returns null for non-video URLs', () => {
+    expect(getVideoSiteContext('https://example.com/page')).toBeNull();
+    expect(getVideoSiteContext('not-a-url')).toBeNull();
+  });
+
+  test('detects YouTube watch pages and keys on the video ID', () => {
+    const ctx = getVideoSiteContext('https://www.youtube.com/watch?v=abc123&t=42');
+    expect(ctx).toEqual({
+      site: 'youtube',
+      id: 'abc123',
+      storageKey: 'paused_youtube_abc123',
+      ruleKeyExact: 'youtube_abc123',
+      ruleKeyAll: 'youtube_all'
+    });
+  });
+
+  test('ignores YouTube non-watch pages', () => {
+    expect(getVideoSiteContext('https://www.youtube.com/')).toBeNull();
+    expect(getVideoSiteContext('https://www.youtube.com/feed/subscriptions')).toBeNull();
+  });
+
+  test('detects Twitch channel pages and keys on the lowercased channel', () => {
+    const ctx = getVideoSiteContext('https://www.twitch.tv/Shroud');
+    expect(ctx).toEqual({
+      site: 'twitch',
+      id: 'shroud',
+      storageKey: 'paused_twitch_shroud',
+      ruleKeyExact: 'twitch_shroud',
+      ruleKeyAll: 'twitch_all'
+    });
+  });
+
+  test('detects Twitch VOD pages and namespaces the videos route', () => {
+    const ctx = getVideoSiteContext('https://www.twitch.tv/videos/123456');
+    expect(ctx).toEqual({
+      site: 'twitch',
+      id: 'videos_123456',
+      storageKey: 'paused_twitch_videos_123456',
+      ruleKeyExact: 'twitch_videos_123456',
+      ruleKeyAll: 'twitch_all'
+    });
+  });
+
+  test('ignores Twitch homepage and non-channel routes', () => {
+    expect(getVideoSiteContext('https://www.twitch.tv/')).toBeNull();
+    expect(getVideoSiteContext('https://www.twitch.tv/directory/category/just-chatting')).toBeNull();
+    expect(getVideoSiteContext('https://www.twitch.tv/settings/profile')).toBeNull();
   });
 });

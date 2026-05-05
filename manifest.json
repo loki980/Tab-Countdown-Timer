@@ -23,7 +23,8 @@
         "tabs"
     ],
     "host_permissions": [
-        "*://*.youtube.com/*"
+        "*://*.youtube.com/*",
+        "*://*.twitch.tv/*"
     ],
     "content_security_policy": {
         "extension_pages": "script-src 'self'; object-src 'self'"

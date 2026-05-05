@@ -242,16 +242,63 @@ function normalizeUrlForRuleKey(urlObj) {
   return urlObj.origin + urlObj.pathname + urlObj.search;
 }
 
-// URL normalization for persistent pause state storage
-function normalizeUrlForStorage(url) {
+// Twitch path segments that are not channels/VODs. Visiting these doesn't
+// open a player, so we don't treat them as "video pages."
+const TWITCH_NON_VIDEO_ROUTES = new Set([
+  'directory', 'p', 'subscriptions', 'following', 'search', 'settings',
+  'team', 'turbo', 'jobs', 'wallet', 'inventory', 'drops', 'downloads',
+  'broadcast', 'logout', 'login', 'signup', 'redeem'
+]);
+
+// Identifies tabs hosting a pausable HTML5 video on a recognized site, and
+// produces the storage/rule keys used to persist state per-content. Returns
+// null for non-video pages so callers can fall back to URL-based keys.
+function getVideoSiteContext(url) {
   try {
     const urlObj = new URL(url);
-    // For YouTube, only keep the video ID - other params (t, list, index) can vary
-    if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
-      const videoId = urlObj.searchParams.get('v');
-      return 'paused_youtube_' + videoId;
+    if (urlObj.hostname.includes('youtube.com')
+      && urlObj.pathname === '/watch'
+      && urlObj.searchParams.has('v')) {
+      const id = urlObj.searchParams.get('v');
+      return {
+        site: 'youtube',
+        id,
+        storageKey: 'paused_youtube_' + id,
+        ruleKeyExact: 'youtube_' + id,
+        ruleKeyAll: 'youtube_all'
+      };
     }
-    return 'paused_' + encodeURIComponent(urlObj.href);
+    if (urlObj.hostname.includes('twitch.tv')) {
+      const path = urlObj.pathname.replace(/^\/+|\/+$/g, '');
+      if (!path) return null;
+      const segments = path.split('/');
+      const first = segments[0].toLowerCase();
+      if (TWITCH_NON_VIDEO_ROUTES.has(first)) return null;
+      const id = first === 'videos' && segments[1]
+        ? 'videos_' + segments[1]
+        : first;
+      return {
+        site: 'twitch',
+        id,
+        storageKey: 'paused_twitch_' + id,
+        ruleKeyExact: 'twitch_' + id,
+        ruleKeyAll: 'twitch_all'
+      };
+    }
+  } catch (e) {
+    // fallthrough
+  }
+  return null;
+}
+
+// URL normalization for persistent pause state storage. For recognized video
+// sites we key on content (so timers survive ?t=, ?list=, etc.); otherwise
+// the full URL is used.
+function normalizeUrlForStorage(url) {
+  const ctx = getVideoSiteContext(url);
+  if (ctx) return ctx.storageKey;
+  try {
+    return 'paused_' + encodeURIComponent(new URL(url).href);
   } catch (e) {
     return 'paused_' + encodeURIComponent(url);
   }
@@ -281,8 +328,9 @@ function FormatDuration(d) {
   return hours + ':' + pad(minutes);
 }
 
-// Function to pause YouTube video
-async function pauseYouTubeVideo(tabId) {
+// Pauses the first HTML5 <video> element on the page. Used for YouTube and
+// Twitch when the user picked "Pause video" instead of "Close tab".
+async function pauseVideoOnPage(tabId) {
   try {
     await ChromeAPIWrapper.scripting.executeScript({
       target: { tabId: tabId },
@@ -300,7 +348,7 @@ async function pauseYouTubeVideo(tabId) {
       'color': '#666666'
     });
   } catch (error) {
-    console.error('Failed to pause YouTube video:', error && error.message ? error.message : error);
+    console.error('Failed to pause video on page:', error && error.message ? error.message : error);
   }
 }
 
@@ -314,19 +362,19 @@ ChromeAPIWrapper.alarms.onAlarm.addListener(async function(alarm) {
       return;
     }
 
-    // Get the tab first to check if it's YouTube
+    // Get the tab so we can decide whether the saved action is meaningful.
     const tab = await ChromeAPIWrapper.tabs.get(tabId);
-    const isYouTube = tab.url && tab.url.includes('youtube.com/watch');
+    const isVideoSite = !!(tab.url && getVideoSiteContext(tab.url));
 
     // Get the saved action for this tab
     const data = await ChromeAPIWrapper.storage.local.get(tabId + '_action');
     const action = data[tabId + '_action'] || 'close';
 
-    if (isYouTube && action === 'pause') {
-      // Pause YouTube video if it's a YouTube tab and pause action is selected
-      await pauseYouTubeVideo(tabId);
+    if (isVideoSite && action === 'pause') {
+      // Pause the embedded video for recognized video sites (YouTube, Twitch).
+      await pauseVideoOnPage(tabId);
     } else {
-      // Close the tab for non-YouTube tabs or if close action is selected
+      // Close the tab for everything else, or when close was explicitly chosen.
       await ChromeAPIWrapper.tabs.remove(tabId);
     }
 
@@ -460,16 +508,15 @@ async function checkAutoStartRule(url) {
   try {
     const data = await ChromeAPIWrapper.storage.local.get(['autostart_rules']);
     const rules = data.autostart_rules || {};
-    const urlObj = new URL(url);
 
-    // YouTube precedence: specific video rule beats 'all YouTube' rule
-    if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) {
-      const videoId = urlObj.searchParams.get('v');
-      const videoRule = rules[`youtube_${videoId}`];
-      if (videoRule) return videoRule;
-      if (rules.youtube_all) return rules.youtube_all;
+    // Video-site precedence: specific content rule beats per-site "all" rule.
+    const ctx = getVideoSiteContext(url);
+    if (ctx) {
+      if (rules[ctx.ruleKeyExact]) return rules[ctx.ruleKeyExact];
+      if (rules[ctx.ruleKeyAll]) return rules[ctx.ruleKeyAll];
     }
 
+    const urlObj = new URL(url);
     const urlKey = `url_${encodeURIComponent(normalizeUrlForRuleKey(urlObj))}`;
     if (rules[urlKey]) return rules[urlKey];
   } catch (error) {
@@ -619,7 +666,7 @@ if (typeof module !== 'undefined' && module.exports) {
     ChromeAPIWrapper,
     HandleRemove,
     UpdateBadges: UpdateBadges,
-    pauseYouTubeVideo,
+    pauseVideoOnPage,
     getMillisecondsUntil10PM,
     getMillisecondsUntilTime,
     setYouTubeTimer,
@@ -627,6 +674,7 @@ if (typeof module !== 'undefined' && module.exports) {
     checkAutoStartRule,
     autoStartTimerForTab,
     handleTabForAutoStart,
-    normalizeUrlForRuleKey
+    normalizeUrlForRuleKey,
+    getVideoSiteContext
   };
 }
