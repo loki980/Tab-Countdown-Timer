@@ -32,6 +32,6 @@
     "globals": "^17.6.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
-    "npm-check-updates": "^22.1.0"
+    "npm-check-updates": "^22.2.2"
   }
 }
