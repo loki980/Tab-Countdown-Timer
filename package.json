@@ -28,7 +28,7 @@
   "homepage": "https://github.com/loki980/Tab-Countdown-Timer#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.5.0",
+    "eslint": "^10.6.0",
     "globals": "^17.6.0",
     "jest": "^30.4.2",
     "jest-environment-jsdom": "^30.4.1",
