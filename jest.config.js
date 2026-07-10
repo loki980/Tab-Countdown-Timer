@@ -6,7 +6,7 @@ module.exports = {
   verbose: true,
   collectCoverage: true,
   coveragePathIgnorePatterns: [
-    '/lib/jquery-3.5.1.min.js',
+    '/lib/jquery-3.7.1.min.js',
     '/node_modules/'
   ],
   coverageThreshold: {

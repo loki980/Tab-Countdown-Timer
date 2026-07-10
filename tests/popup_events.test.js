@@ -1,4 +1,4 @@
-const $ = require('../lib/jquery-3.5.1.min.js');
+const $ = require('../lib/jquery-3.7.1.min.js');
 // Ensure preventDefault exists on event objects
 $.Event.prototype.preventDefault = jest.fn();
 global.$ = global.jQuery = $;

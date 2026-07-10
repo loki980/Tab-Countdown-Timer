@@ -1,5 +1,5 @@
 // Import jQuery for testing
-const $ = require('../lib/jquery-3.5.1.min.js');
+const $ = require('../lib/jquery-3.7.1.min.js');
 global.$ = global.jQuery = $;
 
 // Chrome API mocks are set up in chrome-mocks.js

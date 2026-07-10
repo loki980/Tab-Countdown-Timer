@@ -1,5 +1,5 @@
 // Integration-style tests that execute popup.js to improve coverage
-const $ = require('../lib/jquery-3.5.1.min.js');
+const $ = require('../lib/jquery-3.7.1.min.js');
 const { createChromeMocks } = require('./setup/chrome-mocks');
 
 global.$ = global.jQuery = $;
