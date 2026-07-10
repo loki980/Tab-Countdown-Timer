@@ -236,73 +236,17 @@ const ChromeAPIWrapper = {
   }
 };
 
-// Stable URL form for rule keys. Drops fragment so #section variants of the
-// same URL share one rule. Keeps query so ?id=1 vs ?id=2 stay distinct.
-function normalizeUrlForRuleKey(urlObj) {
-  return urlObj.origin + urlObj.pathname + urlObj.search;
+// URL/video-site helpers live in shared/video-site-utils.js so this file and
+// popup.js can't drift apart. importScripts only exists in the worker; Jest
+// loads this file under CommonJS.
+let VideoSiteUtils;
+if (typeof importScripts === 'function') {
+  importScripts('../shared/video-site-utils.js');
+  VideoSiteUtils = self.VideoSiteUtils;
+} else {
+  VideoSiteUtils = require('../shared/video-site-utils.js');
 }
-
-// Twitch path segments that are not channels/VODs. Visiting these doesn't
-// open a player, so we don't treat them as "video pages."
-const TWITCH_NON_VIDEO_ROUTES = new Set([
-  'directory', 'p', 'subscriptions', 'following', 'search', 'settings',
-  'team', 'turbo', 'jobs', 'wallet', 'inventory', 'drops', 'downloads',
-  'broadcast', 'logout', 'login', 'signup', 'redeem'
-]);
-
-// Identifies tabs hosting a pausable HTML5 video on a recognized site, and
-// produces the storage/rule keys used to persist state per-content. Returns
-// null for non-video pages so callers can fall back to URL-based keys.
-function getVideoSiteContext(url) {
-  try {
-    const urlObj = new URL(url);
-    if (urlObj.hostname.includes('youtube.com')
-      && urlObj.pathname === '/watch'
-      && urlObj.searchParams.has('v')) {
-      const id = urlObj.searchParams.get('v');
-      return {
-        site: 'youtube',
-        id,
-        storageKey: 'paused_youtube_' + id,
-        ruleKeyExact: 'youtube_' + id,
-        ruleKeyAll: 'youtube_all'
-      };
-    }
-    if (urlObj.hostname.includes('twitch.tv')) {
-      const path = urlObj.pathname.replace(/^\/+|\/+$/g, '');
-      if (!path) return null;
-      const segments = path.split('/');
-      const first = segments[0].toLowerCase();
-      if (TWITCH_NON_VIDEO_ROUTES.has(first)) return null;
-      const id = first === 'videos' && segments[1]
-        ? 'videos_' + segments[1]
-        : first;
-      return {
-        site: 'twitch',
-        id,
-        storageKey: 'paused_twitch_' + id,
-        ruleKeyExact: 'twitch_' + id,
-        ruleKeyAll: 'twitch_all'
-      };
-    }
-  } catch (e) {
-    // fallthrough
-  }
-  return null;
-}
-
-// URL normalization for persistent pause state storage. For recognized video
-// sites we key on content (so timers survive ?t=, ?list=, etc.); otherwise
-// the full URL is used.
-function normalizeUrlForStorage(url) {
-  const ctx = getVideoSiteContext(url);
-  if (ctx) return ctx.storageKey;
-  try {
-    return 'paused_' + encodeURIComponent(new URL(url).href);
-  } catch (e) {
-    return 'paused_' + encodeURIComponent(url);
-  }
-}
+const { getVideoSiteContext, normalizeUrlForRuleKey, normalizeUrlForStorage } = VideoSiteUtils;
 
 // Utility functions
 function FormatDuration(d) {
@@ -429,21 +373,18 @@ async function HandleRemove(tabId, _removeInfo) {
 }
 ChromeAPIWrapper.tabs.onRemoved.addListener(HandleRemove);
 
-// Listen for alarm creation to set initial badge color
-ChromeAPIWrapper.alarms.onAlarm.addListener((alarm) => {
-  const tabId = parseInt(alarm.name);
-  ChromeAPIWrapper.action.setBadgeBackgroundColor({
-    'tabId': tabId,
-    'color': '#666666'
-  });
-});
-
 // Set the extension badge to the time remaining every second.
 async function UpdateBadges() {
   const now = new Date();
 
   try {
     const alarms = await ChromeAPIWrapper.alarms.getAll();
+
+    // Nothing to count down — stop polling so the service worker can suspend.
+    if (alarms.length === 0) {
+      stopBadgePolling();
+      return;
+    }
 
     for (const alarm of alarms) {
       const tabId = parseInt(alarm.name);
@@ -476,20 +417,39 @@ async function UpdateBadges() {
     console.error('Failed to get alarms:', error);
   }
 }
-setInterval(UpdateBadges, 250);
 
-// Function to calculate milliseconds until next 10 PM
-function getMillisecondsUntil10PM() {
-  const now = new Date();
-  const target = new Date(now);
-  target.setHours(22, 0, 0, 0); // 10 PM
+// Badge polling runs only while at least one timer exists, so an idle worker
+// can suspend instead of being kept alive by a busy loop. Polling restarts on
+// every worker wake-up (top-level call below), when an auto-start rule
+// creates an alarm, and when the popup reports a new timer via the
+// 'timerStarted' message.
+const BADGE_POLL_INTERVAL_MS = 1000;
+let badgePollTimer = null;
 
-  // If it's already past 10 PM, set timer for tomorrow at 10 PM
-  if (now >= target) {
-    target.setDate(target.getDate() + 1);
+function stopBadgePolling() {
+  if (badgePollTimer !== null) {
+    clearInterval(badgePollTimer);
+    badgePollTimer = null;
   }
+}
 
-  return target.getTime() - now.getTime();
+function startBadgePolling() {
+  if (badgePollTimer === null) {
+    badgePollTimer = setInterval(UpdateBadges, BADGE_POLL_INTERVAL_MS);
+  }
+  // Immediate pass so the badge appears without waiting a full tick (and so
+  // polling stops right away when no alarms exist).
+  UpdateBadges();
+}
+
+startBadgePolling();
+
+if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message && message.type === 'timerStarted') {
+      startBadgePolling();
+    }
+  });
 }
 
 function getMillisecondsUntilTime(hour, minute) {
@@ -573,67 +533,10 @@ async function autoStartTimerForTab(tab, rule) {
     await ChromeAPIWrapper.alarms.create(tabIdStr, {
       when: Date.now() + durationMs
     });
+
+    startBadgePolling();
   } catch (error) {
     console.error('Failed to auto-start timer for tab:', error);
-  }
-}
-
-// Function to set timer for YouTube tab
-async function setYouTubeTimer(tab) {
-  const tabId = tab.id.toString();
-
-  try {
-    const existingAlarm = await ChromeAPIWrapper.alarms.get(tabId);
-    if (existingAlarm) {
-      return;
-    }
-
-    const delayMs = getMillisecondsUntil10PM();
-
-    // Set the action to pause for YouTube videos
-    await ChromeAPIWrapper.storage.local.set({
-      [tabId + '_action']: 'pause'
-    });
-
-    // Set initial badge color
-    await ChromeAPIWrapper.action.setBadgeBackgroundColor({
-      'tabId': parseInt(tabId),
-      'color': '#666666'
-    });
-
-    // Create the alarm for 10 PM
-    await ChromeAPIWrapper.alarms.create(tabId, {
-      when: Date.now() + delayMs
-    });
-  } catch (error) {
-    console.error('Failed to set YouTube timer:', error);
-  }
-}
-
-// Check for YouTube tabs and set timers when needed
-async function checkAndSetYouTubeTimers() {
-  if (typeof chrome !== 'undefined' && chrome.tabs) {
-    try {
-      const tabs = await new Promise((resolve) => {
-        chrome.tabs.query({}, resolve);
-      });
-
-      for (const tab of tabs) {
-        if (tab.url && tab.url.includes('youtube.com/watch')) {
-          // Check if there's already an alarm for this tab
-          const alarm = await new Promise((resolve) => {
-            chrome.alarms.get(tab.id.toString(), resolve);
-          });
-
-          // Only set a new timer if there isn't one already
-          if (!alarm) {
-            await setYouTubeTimer(tab);
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Failed to check YouTube tabs:', error);
-    }
   }
 }
 
@@ -665,12 +568,11 @@ if (typeof module !== 'undefined' && module.exports) {
     FormatDuration,
     ChromeAPIWrapper,
     HandleRemove,
-    UpdateBadges: UpdateBadges,
+    UpdateBadges,
+    startBadgePolling,
+    stopBadgePolling,
     pauseVideoOnPage,
-    getMillisecondsUntil10PM,
     getMillisecondsUntilTime,
-    setYouTubeTimer,
-    checkAndSetYouTubeTimers,
     checkAutoStartRule,
     autoStartTimerForTab,
     handleTabForAutoStart,

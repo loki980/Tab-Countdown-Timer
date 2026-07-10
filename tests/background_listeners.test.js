@@ -10,7 +10,7 @@ describe('Background Listeners', () => {
     alarmListeners = [];
     chromeMocks = createChromeMocks();
     global.chrome = chromeMocks;
-    
+
     // Capture all listeners
     chromeMocks.alarms.onAlarm.addListener.mockImplementation((callback) => {
       alarmListeners.push(callback);
@@ -33,7 +33,7 @@ describe('Background Listeners', () => {
   };
 
   describe('Alarm Listener', () => {
-    test('should close tab when alarm fires for non-YouTube tab', async () => {
+    test('should close tab when alarm fires for non-YouTube tab', async() => {
       const spy = spyConsoleError();
       const tabId = 123;
       const alarm = { name: tabId.toString() };
@@ -48,7 +48,7 @@ describe('Background Listeners', () => {
       for (const listener of alarmListeners) {
         await listener(alarm);
       }
-      
+
       if (spy.mock.calls.length > 0) {
         console.log('Console Error:', spy.mock.calls[0]);
       }
@@ -60,7 +60,7 @@ describe('Background Listeners', () => {
       }, expect.any(Function));
     });
 
-    test('should pause video calls executeScript for YouTube tab with pause action', async () => {
+    test('should pause video calls executeScript for YouTube tab with pause action', async() => {
       const spy = spyConsoleError();
       const tabId = 456;
       const alarm = { name: tabId.toString() };
@@ -79,7 +79,7 @@ describe('Background Listeners', () => {
       for (const listener of alarmListeners) {
         await listener(alarm);
       }
-      
+
       if (spy.mock.calls.length > 0) {
         console.log('Console Error:', spy.mock.calls[0]);
       }
@@ -87,14 +87,14 @@ describe('Background Listeners', () => {
       expect(chromeMocks.scripting.executeScript).toHaveBeenCalledWith(expect.objectContaining({
         target: { tabId: tabId }
       }), expect.any(Function));
-      
+
       expect(chromeMocks.action.setBadgeText).toHaveBeenCalledWith({
         tabId: tabId,
         text: ''
       }, expect.any(Function));
     });
 
-    test('should clear alarm and return if tab fails existence check', async () => {
+    test('should clear alarm and return if tab fails existence check', async() => {
       const spy = spyConsoleError();
       const tabId = 999;
       const alarm = { name: tabId.toString() };
@@ -103,11 +103,11 @@ describe('Background Listeners', () => {
       chromeMocks.tabs.get.mockImplementation((id, callback) => {
         callback(null);
       });
-      
+
       for (const listener of alarmListeners) {
         await listener(alarm);
       }
-      
+
       if (spy.mock.calls.length > 0) {
         console.log('Console Error:', spy.mock.calls[0]);
       }
@@ -116,7 +116,7 @@ describe('Background Listeners', () => {
       expect(chromeMocks.tabs.remove).not.toHaveBeenCalled();
     });
   });
-  
+
   describe('UpdateBadges', () => {
     beforeEach(() => {
       jest.useFakeTimers();
@@ -125,18 +125,18 @@ describe('Background Listeners', () => {
     afterEach(() => {
       jest.useRealTimers();
     });
-    
-    test('should update badges for active alarms', async () => {
+
+    test('should update badges for active alarms', async() => {
       const tabId = 101;
       const now = Date.now();
       const scheduledTime = now + 65000; // 1m 5s remaining
-      
+
       const alarms = [{ name: tabId.toString(), scheduledTime: scheduledTime }];
-      
+
       chromeMocks.alarms.getAll.mockImplementation((callback) => {
         callback(alarms);
       });
-      
+
       chromeMocks.tabs.get.mockImplementation((id, callback) => {
         callback({ id: id }); // Exists
       });
@@ -144,56 +144,56 @@ describe('Background Listeners', () => {
       // Trigger the interval or call UpdateBadges directly if exported
       // UpdateBadges is exported!
       await background.UpdateBadges();
-      
+
       // FormatDuration(65000) -> 1:05
       expect(chromeMocks.action.setBadgeText).toHaveBeenCalledWith({
         tabId: tabId,
         text: '1:05'
       }, expect.any(Function));
-      
+
       expect(chromeMocks.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
         tabId: tabId,
         color: '#666666' // > 30s
       }, expect.any(Function));
     });
 
-    test('should use red badge for under 30 seconds', async () => {
+    test('should use red badge for under 30 seconds', async() => {
       const tabId = 102;
       const now = Date.now();
       const scheduledTime = now + 15000; // 15s remaining
-      
+
       const alarms = [{ name: tabId.toString(), scheduledTime: scheduledTime }];
-      
+
       chromeMocks.alarms.getAll.mockImplementation((callback) => {
         callback(alarms);
       });
-      
+
       chromeMocks.tabs.get.mockImplementation((id, callback) => {
         callback({ id: id });
       });
 
       await background.UpdateBadges();
-      
+
       expect(chromeMocks.action.setBadgeBackgroundColor).toHaveBeenCalledWith({
         tabId: tabId,
         color: '#ff0000'
       }, expect.any(Function));
     });
 
-    test('should clear alarm if tab does not exist during update', async () => {
+    test('should clear alarm if tab does not exist during update', async() => {
       const tabId = 103;
       const alarms = [{ name: tabId.toString(), scheduledTime: Date.now() + 10000 }];
-      
+
       chromeMocks.alarms.getAll.mockImplementation((callback) => {
         callback(alarms);
       });
-      
+
       chromeMocks.tabs.get.mockImplementation((id, callback) => {
         callback(null); // Tab gone
       });
 
       await background.UpdateBadges();
-      
+
       expect(chromeMocks.alarms.clear).toHaveBeenCalledWith(tabId.toString(), expect.any(Function));
     });
   });

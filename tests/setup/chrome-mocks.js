@@ -73,7 +73,9 @@ const createChromeMocks = () => {
       })
     },
     runtime: {
-      lastError: null
+      lastError: null,
+      onMessage: { addListener: jest.fn() },
+      sendMessage: jest.fn(() => Promise.resolve())
     }
   };
 };

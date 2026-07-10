@@ -22,6 +22,7 @@ module.exports = [
         ...globals.node,
         ...globals.jest,
         chrome: 'readonly',
+        importScripts: 'readonly',
         $: 'readonly',
         jQuery: 'readonly'
       }

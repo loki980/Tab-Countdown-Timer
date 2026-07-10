@@ -4,14 +4,14 @@ const {
   ChromeAPIWrapper,
   HandleRemove,
   UpdateBadges,
-  getMillisecondsUntil10PM,
-  setYouTubeTimer,
-  checkAndSetYouTubeTimers,
+  startBadgePolling,
+  stopBadgePolling,
   pauseVideoOnPage,
   getVideoSiteContext
 } = require('../background/background.js');
 
 const alarmListeners = chrome.alarms.onAlarm.addListener.mock.calls.map(call => call[0]);
+const messageListeners = chrome.runtime.onMessage.addListener.mock.calls.map(call => call[0]);
 const createdListeners = chrome.tabs.onCreated.addListener.mock.calls.map(call => call[0]);
 const updatedListeners = chrome.tabs.onUpdated.addListener.mock.calls.map(call => call[0]);
 
@@ -462,9 +462,67 @@ describe('Background Script Utility Functions', () => {
   });
 
   /**
-   * Tests for YouTube-specific functionality
+   * Tests for the badge polling lifecycle — polling runs only while alarms
+   * exist and restarts when the popup reports a new timer.
    */
-  describe('YouTube Timer Functions', () => {
+  describe('Badge polling lifecycle', () => {
+    afterEach(() => {
+      stopBadgePolling();
+      jest.restoreAllMocks();
+    });
+
+    test('startBadgePolling installs a single 1s interval', () => {
+      jest.spyOn(ChromeAPIWrapper.alarms, 'getAll').mockResolvedValue([]);
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+      stopBadgePolling();
+      startBadgePolling();
+      startBadgePolling();
+
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+      expect(setIntervalSpy).toHaveBeenCalledWith(UpdateBadges, 1000);
+    });
+
+    test('UpdateBadges stops polling once no alarms remain', async() => {
+      jest.spyOn(ChromeAPIWrapper.alarms, 'getAll').mockResolvedValue([]);
+      const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+
+      stopBadgePolling();
+      startBadgePolling();
+      await UpdateBadges();
+
+      expect(clearIntervalSpy).toHaveBeenCalled();
+    });
+
+    test('timerStarted message from the popup restarts polling', () => {
+      jest.spyOn(ChromeAPIWrapper.alarms, 'getAll').mockResolvedValue([]);
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+      stopBadgePolling();
+      expect(messageListeners.length).toBeGreaterThan(0);
+      for (const listener of messageListeners) {
+        listener({ type: 'timerStarted' });
+      }
+
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test('unrelated messages do not start polling', () => {
+      const setIntervalSpy = jest.spyOn(global, 'setInterval');
+
+      stopBadgePolling();
+      for (const listener of messageListeners) {
+        listener({ type: 'somethingElse' });
+      }
+
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * Tests for video pause functionality
+   */
+  describe('Video Pause Functions', () => {
     beforeEach(() => {
       jest.useFakeTimers();
       // Set a fixed date for consistent testing
@@ -503,104 +561,6 @@ describe('Background Script Utility Functions', () => {
       jest.useRealTimers();
     });
 
-    test('getMillisecondsUntil10PM calculates correctly for same day', () => {
-      // Test at 3 PM, should return milliseconds until 10 PM same day
-      const result = getMillisecondsUntil10PM();
-      const expected = 7 * 60 * 60 * 1000; // 7 hours in milliseconds
-      expect(result).toBe(expected);
-    });
-
-    test('getMillisecondsUntil10PM calculates correctly for next day', () => {
-      // Test at 11 PM, should return milliseconds until 10 PM next day
-      jest.setSystemTime(new Date('2024-01-01T23:00:00'));
-      const result = getMillisecondsUntil10PM();
-      const expected = 23 * 60 * 60 * 1000; // 23 hours in milliseconds
-      expect(result).toBe(expected);
-    });
-
-    test('setYouTubeTimer function exists and can be called', async() => {
-      const mockTab = { id: 123, url: 'https://youtube.com/watch?v=abc' };
-
-      // Verify the function exists and can be called without throwing
-      expect(typeof setYouTubeTimer).toBe('function');
-
-      // This is a unit test - the function integration with Chrome APIs
-      // is better tested in a full Chrome extension environment
-      await expect(setYouTubeTimer(mockTab)).resolves.not.toThrow();
-    });
-
-    test('setYouTubeTimer does not create a new alarm if one already exists', async() => {
-      const mockTab = { id: 123, url: 'https://youtube.com/watch?v=abc' };
-      const existingAlarm = { name: '123', scheduledTime: Date.now() + 100000 };
-
-      // Mock ChromeAPIWrapper.alarms.get to return an existing alarm
-      const originalGet = ChromeAPIWrapper.alarms.get;
-      ChromeAPIWrapper.alarms.get = jest.fn().mockResolvedValue(existingAlarm);
-
-      await setYouTubeTimer(mockTab);
-
-      // Expect that chrome.alarms.create was not called
-      expect(global.chrome.alarms.create).not.toHaveBeenCalled();
-
-      // Restore original method
-      ChromeAPIWrapper.alarms.get = originalGet;
-    });
-
-    test('setYouTubeTimer creates a new alarm if one does not exist', async() => {
-      const mockTab = { id: 456, url: 'https://youtube.com/watch?v=def' };
-
-      // Mock ChromeAPIWrapper methods
-      const originalGet = ChromeAPIWrapper.alarms.get;
-      const originalStorageSet = ChromeAPIWrapper.storage.local.set;
-      const originalSetBadgeColor = ChromeAPIWrapper.action.setBadgeBackgroundColor;
-      const originalAlarmsCreate = ChromeAPIWrapper.alarms.create;
-
-      ChromeAPIWrapper.alarms.get = jest.fn().mockResolvedValue(null);
-      ChromeAPIWrapper.storage.local.set = jest.fn().mockResolvedValue();
-      ChromeAPIWrapper.action.setBadgeBackgroundColor = jest.fn();
-      ChromeAPIWrapper.alarms.create = jest.fn().mockResolvedValue();
-
-      await setYouTubeTimer(mockTab);
-
-      // Expect that ChromeAPIWrapper.alarms.create was called
-      expect(ChromeAPIWrapper.alarms.create).toHaveBeenCalled();
-
-      // Restore original methods
-      ChromeAPIWrapper.alarms.get = originalGet;
-      ChromeAPIWrapper.storage.local.set = originalStorageSet;
-      ChromeAPIWrapper.action.setBadgeBackgroundColor = originalSetBadgeColor;
-      ChromeAPIWrapper.alarms.create = originalAlarmsCreate;
-    });
-
-    test('setYouTubeTimer handles errors gracefully', async() => {
-      const mockTab = { id: 123, url: 'https://youtube.com/watch?v=abc' };
-      const testError = new Error('Alarm get error');
-
-      // Mock ChromeAPIWrapper.alarms.get to throw an error
-      const originalGet = ChromeAPIWrapper.alarms.get;
-      ChromeAPIWrapper.alarms.get = jest.fn().mockRejectedValue(testError);
-
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      await setYouTubeTimer(mockTab);
-
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to set YouTube timer:', testError);
-
-      // Restore original methods
-      ChromeAPIWrapper.alarms.get = originalGet;
-      consoleSpy.mockRestore();
-    });
-
-    test('checkAndSetYouTubeTimers processes YouTube tabs', async() => {
-      // This is a more complex integration test that would require
-      // mocking the global chrome object completely. For now, we verify
-      // the function exists and can be called
-      expect(typeof checkAndSetYouTubeTimers).toBe('function');
-
-      // The actual implementation tests are covered by individual function tests
-      // and real Chrome extension testing would require a full extension environment
-    });
-
     test('pauseVideoOnPage triggers script execution and badge reset', async() => {
       const executeSpy = jest.spyOn(ChromeAPIWrapper.scripting, 'executeScript').mockResolvedValue([]);
       const setBadgeTextSpy = jest.spyOn(ChromeAPIWrapper.action, 'setBadgeText').mockResolvedValue();
@@ -615,40 +575,6 @@ describe('Background Script Utility Functions', () => {
       executeSpy.mockRestore();
       setBadgeTextSpy.mockRestore();
       setColorSpy.mockRestore();
-    });
-
-    test('checkAndSetYouTubeTimers sets timers for fresh YouTube tabs', async() => {
-      const youtubeTab = { id: 901, url: 'https://www.youtube.com/watch?v=abc' };
-      const otherTab = { id: 777, url: 'https://example.com' };
-
-      chrome.tabs.query = jest.fn((_query, callback) => {
-        callback([youtubeTab, otherTab]);
-      });
-
-      chrome.alarms.get = jest.fn((name, callback) => {
-        if (name === youtubeTab.id.toString()) {
-          callback(null);
-        } else {
-          callback({ name });
-        }
-      });
-
-      const createSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'create').mockResolvedValue();
-      const storageSpy = jest.spyOn(ChromeAPIWrapper.storage.local, 'set').mockResolvedValue();
-      const colorSpy = jest.spyOn(ChromeAPIWrapper.action, 'setBadgeBackgroundColor');
-      const getSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'get').mockResolvedValue(null);
-
-      await checkAndSetYouTubeTimers();
-
-      expect(createSpy).toHaveBeenCalledWith(youtubeTab.id.toString(), expect.any(Object));
-      expect(storageSpy).toHaveBeenCalled();
-      expect(colorSpy).toHaveBeenCalledWith({ tabId: youtubeTab.id, color: '#666666' });
-      expect(getSpy).toHaveBeenCalledWith(youtubeTab.id.toString());
-
-      createSpy.mockRestore();
-      storageSpy.mockRestore();
-      colorSpy.mockRestore();
-      getSpy.mockRestore();
     });
   });
 
@@ -680,7 +606,6 @@ describe('Background Script Utility Functions', () => {
 
   describe('Alarm listener behavior', () => {
     const primaryAlarmHandler = alarmListeners[0];
-    const badgeColorListener = alarmListeners[1];
 
     test('clears alarms when the tab is gone', async() => {
       const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockResolvedValue(false);
@@ -762,13 +687,8 @@ describe('Background Script Utility Functions', () => {
       removeSpy.mockRestore();
     });
 
-    test('secondary alarm listener always resets the badge color', () => {
-      const colorSpy = jest.spyOn(ChromeAPIWrapper.action, 'setBadgeBackgroundColor');
-
-      badgeColorListener({ name: '22' });
-
-      expect(colorSpy).toHaveBeenCalledWith({ tabId: 22, color: '#666666' });
-      colorSpy.mockRestore();
+    test('only one alarm listener is registered', () => {
+      expect(alarmListeners).toHaveLength(1);
     });
   });
 
@@ -841,25 +761,6 @@ describe('Background Script Utility Functions', () => {
 
       consoleSpy.mockRestore();
       existsSpy.mockRestore();
-    });
-  });
-
-  describe('checkAndSetYouTubeTimers error handling', () => {
-    test('logs error when checking YouTube tabs fails', async() => {
-      const consoleSpy = jest.spyOn(console, 'error').mockImplementation();
-
-      // Mock chrome.tabs.query to throw an error
-      const originalQuery = chrome.tabs.query;
-      chrome.tabs.query = jest.fn((_query, callback) => {
-        throw new Error('Query failed');
-      });
-
-      await checkAndSetYouTubeTimers();
-
-      expect(consoleSpy).toHaveBeenCalledWith('Failed to check YouTube tabs:', expect.any(Error));
-
-      chrome.tabs.query = originalQuery;
-      consoleSpy.mockRestore();
     });
   });
 

@@ -97,13 +97,13 @@ describe('Popup Events', () => {
     jest.clearAllMocks();
   });
 
-  const loadPopup = async () => {
+  const loadPopup = async() => {
     require('../popup/popup.js');
     // jQuery ready might fire asynchronously
     await new Promise(resolve => setTimeout(resolve, 50));
   };
 
-  test('Start Button click properly creates alarm', async () => {
+  test('Start Button click properly creates alarm', async() => {
     // Mock tab query returning Promise - set up BEFORE loadPopup
     chromeMocks.tabs.query.mockImplementation((q, cb) => {
       const tabs = [{ id: 123, url: 'http://google.com' }];
@@ -136,7 +136,42 @@ describe('Popup Events', () => {
     expect($('#cancelDiv').css('display')).not.toBe('none');
   });
 
-  test('Cancel Button click clears alarm and resets UI', async () => {
+  test('Start Button notifies the background so badge polling resumes', async() => {
+    chromeMocks.tabs.query.mockImplementation((q, cb) => {
+      const tabs = [{ id: 123, url: 'http://google.com' }];
+      if (cb) cb(tabs);
+      return Promise.resolve(tabs);
+    });
+
+    await loadPopup();
+
+    $('#startbutton').click();
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(chromeMocks.runtime.sendMessage).toHaveBeenCalledWith({ type: 'timerStarted' });
+  });
+
+  test('Start Button still creates the alarm when the background is unreachable', async() => {
+    chromeMocks.tabs.query.mockImplementation((q, cb) => {
+      const tabs = [{ id: 123, url: 'http://google.com' }];
+      if (cb) cb(tabs);
+      return Promise.resolve(tabs);
+    });
+    chromeMocks.runtime.sendMessage.mockImplementation(
+      () => Promise.reject(new Error('Receiving end does not exist'))
+    );
+
+    await loadPopup();
+
+    $('#startbutton').click();
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(chromeMocks.alarms.create).toHaveBeenCalledWith('123', expect.objectContaining({
+      when: expect.any(Number)
+    }));
+  });
+
+  test('Cancel Button click clears alarm and resets UI', async() => {
     chromeMocks.tabs.query.mockImplementation((q, cb) => {
       const tabs = [{ id: 123, url: 'http://example.com' }];
       if (cb) cb(tabs);
@@ -170,7 +205,7 @@ describe('Popup Events', () => {
     expect(pauseBtn.hasClass('paused')).toBe(false);
   });
 
-  test('Pause Button toggles state and alarm', async () => {
+  test('Pause Button toggles state and alarm', async() => {
     // Mock existing alarm BEFORE loading popup
     chromeMocks.alarms.get.mockImplementation((id, cb) => {
       cb({ scheduledTime: Date.now() + 10000 });
@@ -210,51 +245,51 @@ describe('Popup Events', () => {
     expect(chromeMocks.alarms.create).toHaveBeenCalled();
   });
 
-  test('Input validation: Hours and Minutes keys and scroll', async () => {
+  test('Input validation: Hours and Minutes keys and scroll', async() => {
     await loadPopup();
     const hours = $('#hours');
     const minutes = $('#minutes');
-    
+
     // Test ArrowUp on Hours
     hours.val(0);
     const eUp = $.Event('keydown', { key: 'ArrowUp' });
     hours.trigger(eUp);
     expect(hours.val()).toBe('1');
-    
+
     // Test ArrowDown on Hours
     const eDown = $.Event('keydown', { key: 'ArrowDown' });
     hours.trigger(eDown);
     expect(hours.val()).toBe('0');
-    
+
     // Test Wheel on Minutes (Scroll up -> +1)
     minutes.val(30);
     const eWheelUp = $.Event('wheel', { originalEvent: { deltaY: -100 } });
     minutes.trigger(eWheelUp);
     expect(minutes.val()).toBe('31');
-    
+
     // Test Shift + Wheel on Minutes (+5)
     const eWheelShift = $.Event('wheel', { originalEvent: { deltaY: -100 }, shiftKey: true });
     minutes.trigger(eWheelShift);
     expect(minutes.val()).toBe('36');
   });
 
-  test('Input Sanitization', async () => {
+  test('Input Sanitization', async() => {
     await loadPopup();
     const hours = $('#hours');
     // Change type to text to allow invalid chars for testing sanitization logic
     hours.attr('type', 'text');
-    
+
     hours.val('12a');
     hours.trigger('input');
     expect(hours.val()).toBe('12');
-    
+
     hours.val('10');
     hours.trigger('blur');
     // Blur triggers fixOverflowAndUnderflows, but value shouldn't change if valid
     expect(hours.val()).toBe('10');
   });
 
-  test('Preset Buttons', async () => {
+  test('Preset Buttons', async() => {
     await loadPopup();
     const btn5m = $('.preset-btn[data-minutes="5"]');
     const minutes = $('#minutes');
@@ -263,7 +298,7 @@ describe('Popup Events', () => {
     expect(minutes.val()).toBe('5');
   });
 
-  test('Duration stepper buttons increment and decrement', async () => {
+  test('Duration stepper buttons increment and decrement', async() => {
     await loadPopup();
     const $minutes = $('#minutes');
     const $minutesField = $minutes.parent();
@@ -278,26 +313,25 @@ describe('Popup Events', () => {
     $stepDown.click();
     expect($minutes.val()).toBe('29');
   });
-  
-  test('YouTube Actions Persistence', async () => {
+
+  test('YouTube Actions Persistence', async() => {
     // Mock YouTube tab
     chromeMocks.tabs.query.mockImplementation((q, cb) => {
       const tabs = [{ id: 456, url: 'https://youtube.com/watch?v=xyz' }];
       cb(tabs);
       return Promise.resolve(tabs);
     });
-    
+
     await loadPopup();
-    
+
     // Wait for init
     await new Promise(r => setTimeout(r, 0));
-    
-    const pauseRadio = $('input[value="pause"]');
+
     const closeRadio = $('input[value="close"]');
-    
+
     // Change to close
     closeRadio.prop('checked', true).trigger('change');
-    
+
     expect(chromeMocks.storage.local.set).toHaveBeenCalledWith({ '456_action': 'close' });
   });
 });

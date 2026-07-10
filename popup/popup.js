@@ -1,11 +1,17 @@
-// Import ChromeAPIWrapper if in test environment
+// Import ChromeAPIWrapper if in test environment. The shared URL helpers
+// come from shared/video-site-utils.js — a <script> tag in popup.html when
+// running as an extension, require() under Jest.
 let ChromeAPIWrapper;
+let VideoSiteUtils;
 if (typeof require !== 'undefined') {
   const background = require('../background/background.js');
   ChromeAPIWrapper = background.ChromeAPIWrapper;
+  VideoSiteUtils = require('../shared/video-site-utils.js');
 } else {
   ChromeAPIWrapper = chrome;
+  VideoSiteUtils = window.VideoSiteUtils;
 }
+const { getVideoSiteContext, normalizeUrlForStorage, normalizeUrlForRuleKey } = VideoSiteUtils;
 
 // Provide a chrome fallback when running outside the extension runtime
 if (typeof chrome === 'undefined' && ChromeAPIWrapper) {
@@ -34,74 +40,25 @@ const initPopup = function() {
   $('#cancelDiv').hide();
   $('.action-options').hide();
 
-  const TWITCH_NON_VIDEO_ROUTES = new Set([
-    'directory', 'p', 'subscriptions', 'following', 'search', 'settings',
-    'team', 'turbo', 'jobs', 'wallet', 'inventory', 'drops', 'downloads',
-    'broadcast', 'logout', 'login', 'signup', 'redeem'
-  ]);
-
-  // Mirrors background.js getVideoSiteContext. Identifies tabs hosting a
-  // pausable HTML5 video on a recognized site (YouTube, Twitch) so the popup
-  // can offer per-content auto-start rules and the "pause video" action.
-  function getVideoSiteContext(url) {
-    try {
-      const urlObj = new URL(url);
-      if (urlObj.hostname.includes('youtube.com')
-        && urlObj.pathname === '/watch'
-        && urlObj.searchParams.has('v')) {
-        const id = urlObj.searchParams.get('v');
-        return {
-          site: 'youtube',
-          id,
-          storageKey: 'paused_youtube_' + id,
-          ruleKeyExact: 'youtube_' + id,
-          ruleKeyAll: 'youtube_all'
-        };
-      }
-      if (urlObj.hostname.includes('twitch.tv')) {
-        const path = urlObj.pathname.replace(/^\/+|\/+$/g, '');
-        if (!path) return null;
-        const segments = path.split('/');
-        const first = segments[0].toLowerCase();
-        if (TWITCH_NON_VIDEO_ROUTES.has(first)) return null;
-        const id = first === 'videos' && segments[1]
-          ? 'videos_' + segments[1]
-          : first;
-        return {
-          site: 'twitch',
-          id,
-          storageKey: 'paused_twitch_' + id,
-          ruleKeyExact: 'twitch_' + id,
-          ruleKeyAll: 'twitch_all'
-        };
-      }
-    } catch (e) {
-      // fallthrough
-    }
-    return null;
-  }
-
   // Per-site copy for the auto-start "Apply to" dropdown.
   const VIDEO_SITE_LABELS = {
     youtube: { exact: 'This exact video', all: 'All YouTube videos' },
     twitch: { exact: 'This channel/video', all: 'All Twitch streams' }
   };
 
-  // URL normalization for persistent pause state storage
-  function normalizeUrlForStorage(url) {
-    const ctx = getVideoSiteContext(url);
-    if (ctx) return ctx.storageKey;
+  // Wake the service worker so badge polling resumes for a newly created
+  // alarm. Without this the badge stays blank until the next worker wake-up.
+  function notifyTimerStarted() {
     try {
-      return 'paused_' + encodeURIComponent(new URL(url).href);
-    } catch (e) {
-      return 'paused_' + encodeURIComponent(url);
+      if (chrome.runtime && typeof chrome.runtime.sendMessage === 'function') {
+        const result = chrome.runtime.sendMessage({ type: 'timerStarted' });
+        if (result && typeof result.catch === 'function') {
+          result.catch(() => {});
+        }
+      }
+    } catch {
+      // No background listener (e.g. tests) — polling restarts on next wake.
     }
-  }
-
-  // Stable URL form for rule keys. Drops fragment so #section variants of the
-  // same URL share one rule. Keeps query so ?id=1 vs ?id=2 stay distinct.
-  function normalizeUrlForRuleKey(urlObj) {
-    return urlObj.origin + urlObj.pathname + urlObj.search;
   }
 
   function getAutoStartRuleKey(url, matchType = 'exact') {
@@ -111,7 +68,7 @@ const initPopup = function() {
     }
     try {
       return `url_${encodeURIComponent(normalizeUrlForRuleKey(new URL(url)))}`;
-    } catch (e) {
+    } catch {
       return `url_${encodeURIComponent(url)}`;
     }
   }
@@ -252,7 +209,7 @@ const initPopup = function() {
     try {
       const d = new Date(timestampMs);
       return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    } catch (e) {
+    } catch {
       return '';
     }
   }
@@ -364,6 +321,7 @@ const initPopup = function() {
           });
           // Clear the URL-based pause state on resume
           await chrome.storage.local.remove(urlKey);
+          notifyTimerStarted();
         }
       } catch (error) {
         console.error('Error handling pause:', error);
@@ -656,6 +614,7 @@ const initPopup = function() {
       const delayMs = getCloseTimeInSeconds() * 1000;
       const scheduledTime = Date.now() + delayMs;
       await chrome.alarms.create(tabIdStr, { when: scheduledTime });
+      notifyTimerStarted();
 
       // Show the cancel div and mark as update-able
       $('#cancelDiv').show();
