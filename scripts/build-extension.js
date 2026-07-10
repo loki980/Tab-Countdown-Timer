@@ -80,21 +80,52 @@ function buildExtension() {
 }
 
 function validatePackage(zipPath) {
-  // Basic validation - in a real scenario, you might want to:
-  // 1. Extract ZIP and verify all required files are present
-  // 2. Check file sizes are reasonable
-  // 3. Validate manifest syntax again
-  // 4. Check for any prohibited content
-
   const requiredFiles = [
     'manifest.json',
     'background/background.js',
+    'shared/video-site-utils.js',
     'popup/popup.html',
     'popup/popup.js',
     'popup/styles.css'
   ];
 
-  console.log(`✅ Package validation passed for ${requiredFiles.length} required files`);
+  // Dev/tooling files that must never ship to the store.
+  const forbiddenPatterns = [
+    /^tests\//,
+    /^scripts\//,
+    /^coverage\//,
+    /^node_modules\//,
+    /^\.claude\//,
+    /^\.vscode\//,
+    /^\.github\//,
+    /^\.git\//,
+    /^package(-lock)?\.json$/,
+    /^jest\./,
+    /^eslint\./,
+    /^CLAUDE\.md$/,
+    /^release\.sh$/,
+    /\.zip$/
+  ];
+
+  const listing = execSync(`unzip -Z1 "${zipPath}"`, { encoding: 'utf8' });
+  const entries = listing
+    .split('\n')
+    .map(line => line.trim().replace(/^\.\//, ''))
+    .filter(Boolean);
+
+  const missing = requiredFiles.filter(file => !entries.includes(file));
+  if (missing.length > 0) {
+    throw new Error(`Package is missing required files: ${missing.join(', ')}`);
+  }
+
+  const forbidden = entries.filter(entry =>
+    forbiddenPatterns.some(pattern => pattern.test(entry))
+  );
+  if (forbidden.length > 0) {
+    throw new Error(`Package contains files that must not ship: ${forbidden.join(', ')}`);
+  }
+
+  console.log(`✅ Package validation passed (${entries.length} entries, ${requiredFiles.length} required files present)`);
 
   // Check file size limits (Chrome Web Store has limits)
   const stats = fs.statSync(zipPath);
