@@ -19,7 +19,7 @@ A productivity-focused Chromium browser extension (Chrome, Edge, Brave) that hel
   - Handles input overflow/underflow (e.g., 70 minutes becomes 1h 10m).
   - ETA display and persists last-used values.
 - **Unobtrusive Design**: No auto-scheduling; user-initiated only for direct control.
-- **Tested & Stable**: Version 1.5.0 with Jest unit tests for core functionality.
+- **Tested & Stable**: Jest unit tests for core functionality, with coverage thresholds enforced in CI.
 
 ## Installation
 
@@ -96,11 +96,13 @@ Tab-Countdown-Timer/
 │   ├── hourglass128.png     # 128x128
 │   └── hourglass512.png     # 512x512
 ├── lib/                     # Shared libraries
-│   └── jquery-3.5.1.min.js  # jQuery for UI
+│   └── jquery-3.7.1.min.js  # jQuery for UI
 ├── popup/                   # Popup UI
 │   ├── popup.html           # HTML structure
 │   ├── popup.js             # UI logic (inputs, timers, Chrome API calls)
 │   └── styles.css           # CSS styling
+├── shared/                  # Code shared by the worker and popup
+│   └── video-site-utils.js  # YouTube/Twitch URL detection and storage keys
 ├── reports/                 # Test reports (generated)
 │   └── jest/                # Jest output
 └── tests/                   # Jest tests
