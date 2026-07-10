@@ -8,6 +8,7 @@ This is a Chrome/Edge/Brave browser extension (Manifest V3) that allows users to
 
 - `manifest.json` - Extension manifest with permissions and entry points
 - `background/background.js` - Service worker handling alarms, badge updates, and tab actions
+- `shared/video-site-utils.js` - URL/video-site helpers shared by the service worker and popup (loaded via `importScripts`, a `<script>` tag, and `require` in tests)
 - `popup/popup.js` - Popup UI logic using jQuery
 - `popup/popup.html` - Popup HTML structure
 - `popup/styles.css` - CSS with dark/light theme support
