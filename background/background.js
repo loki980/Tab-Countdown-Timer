@@ -395,32 +395,33 @@ const DEFAULT_ICON_PATHS = {
   128: '/icons/hourglass128.png'
 };
 
-// Reduces the remaining time to a 1-2 digit value plus a unit. At toolbar
-// size, two big digits are readable where "29m" or "9:59" is not, so the
-// icon shows the most significant quantity and the tooltip keeps the exact
-// countdown.
-function formatCountdownParts(d) {
+// Reduces the remaining time to at most three characters so the icon
+// digits render as large as possible at toolbar size. A text unit label
+// proved unreadable at that size, so the unit is implied instead: red
+// digits are ticking seconds (final minute), plain digits are minutes,
+// and hours carry an "h" suffix. The tooltip keeps the exact countdown.
+function formatIconText(d) {
   if (d < 0) {
-    return { value: '?', unit: '' };
+    return '?';
   }
   const totalSeconds = Math.ceil(d / 1000);
   if (totalSeconds < 60) {
-    return { value: String(totalSeconds), unit: 'sec' };
+    return String(totalSeconds);
   }
   const totalMinutes = Math.floor(totalSeconds / 60);
   if (totalMinutes <= 99) {
-    return { value: String(totalMinutes), unit: 'min' };
+    return String(totalMinutes);
   }
-  return { value: String(Math.round(totalMinutes / 60)), unit: 'hr' };
+  return Math.round(totalMinutes / 60) + 'h';
 }
 
 // Draws the remaining time onto a badge-colored plate the size of the
-// toolbar icon: big digits on top, a small unit label along the bottom.
-// The browser badge is too small for this text (Firefox truncates at ~4
-// tiny characters), so the countdown is rendered into the icon itself.
-// Returns null when OffscreenCanvas is unavailable so callers can fall
-// back to badge text.
-function renderCountdownIcon(value, unit, color) {
+// toolbar icon. The browser badge is too small for this text (Firefox
+// truncates at ~4 tiny characters), so the countdown is rendered into the
+// icon itself, where the digits can use the full icon area. Returns null
+// when OffscreenCanvas is unavailable so callers can fall back to badge
+// text.
+function renderCountdownIcon(text, color) {
   if (typeof OffscreenCanvas === 'undefined') {
     return null;
   }
@@ -435,25 +436,18 @@ function renderCountdownIcon(value, unit, color) {
   ctx.roundRect(0, 0, ICON_SIZE, ICON_SIZE, 7);
   ctx.fill();
 
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // Largest bold font that keeps the value inside the plate. With a unit
-  // the value sits in the upper region; without one it is centered.
-  const valueCenterY = unit ? 13 : ICON_SIZE / 2 + 1;
-  let fontSize = unit ? 20 : 22;
+  // Largest bold font that keeps the text inside the plate.
+  let fontSize = 24;
   ctx.font = 'bold ' + fontSize + 'px sans-serif';
-  while (fontSize > 8 && ctx.measureText(value).width > ICON_SIZE - 4) {
+  while (fontSize > 8 && ctx.measureText(text).width > ICON_SIZE - 4) {
     fontSize--;
     ctx.font = 'bold ' + fontSize + 'px sans-serif';
   }
-  ctx.fillText(value, ICON_SIZE / 2, valueCenterY);
 
-  if (unit) {
-    ctx.font = 'bold 9px sans-serif';
-    ctx.fillText(unit, ICON_SIZE / 2, 27);
-  }
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, ICON_SIZE / 2, ICON_SIZE / 2 + 1);
   return ctx.getImageData(0, 0, ICON_SIZE, ICON_SIZE);
 }
 
@@ -624,10 +618,9 @@ async function UpdateBadges() {
 
         // The icon plate goes red for the whole seconds-mode final minute,
         // matching the switch to a ticking seconds display.
-        const parts = formatCountdownParts(timeRemaining);
-        const plateColor = parts.unit === 'sec' ? '#ff0000' : '#666666';
+        const plateColor = secondsRemaining < 60 ? '#ff0000' : '#666666';
 
-        const imageData = renderCountdownIcon(parts.value, parts.unit, plateColor);
+        const imageData = renderCountdownIcon(formatIconText(timeRemaining), plateColor);
         if (imageData) {
           // Draw the countdown into the toolbar icon and keep the badge
           // empty; the badge is too small to show the text un-truncated.
@@ -850,7 +843,7 @@ if (typeof module !== 'undefined' && module.exports) {
     UpdateBadges: UpdateBadges,
     pauseVideoOnPage,
     renderCountdownIcon,
-    formatCountdownParts,
+    formatIconText,
     getMillisecondsUntil10PM,
     getMillisecondsUntilTime,
     setYouTubeTimer,
