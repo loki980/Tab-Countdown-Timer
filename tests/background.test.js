@@ -8,7 +8,8 @@ const {
   setYouTubeTimer,
   checkAndSetYouTubeTimers,
   pauseVideoOnPage,
-  getVideoSiteContext
+  getVideoSiteContext,
+  renderCountdownIcon
 } = require('../background/background.js');
 
 const alarmListeners = chrome.alarms.onAlarm.addListener.mock.calls.map(call => call[0]);
@@ -71,6 +72,137 @@ describe('Background Script Utility Functions', () => {
       expect(FormatDuration(299500)).toBe('5:00'); // 4m 59.5s -> 5:00
       expect(FormatDuration(299000)).toBe('4:59'); // exactly one full second below 5m
       expect(FormatDuration(4500)).toBe('0:05');   // 4.5s -> 0:05
+    });
+  });
+
+  /**
+   * Tests for renderCountdownIcon, which draws the remaining time into the
+   * toolbar icon because the browser badge only fits ~4 tiny characters.
+   */
+  describe('renderCountdownIcon', () => {
+    afterEach(() => {
+      delete global.OffscreenCanvas;
+    });
+
+    test('returns null when OffscreenCanvas is unavailable', () => {
+      expect(renderCountdownIcon('29m', '#666666')).toBeNull();
+    });
+
+    test('draws the text on a colored plate and returns its image data', () => {
+      const imageData = { width: 32, height: 32 };
+      const ctx = {
+        beginPath: jest.fn(),
+        roundRect: jest.fn(),
+        fill: jest.fn(),
+        fillText: jest.fn(),
+        measureText: jest.fn(() => ({ width: 20 })),
+        getImageData: jest.fn(() => imageData)
+      };
+      global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
+
+      const result = renderCountdownIcon('29m', '#666666');
+
+      expect(result).toBe(imageData);
+      expect(ctx.roundRect).toHaveBeenCalledWith(0, 0, 32, 32, 7);
+      expect(ctx.fillText).toHaveBeenCalledWith('29m', 16, 17);
+      expect(ctx.getImageData).toHaveBeenCalledWith(0, 0, 32, 32);
+    });
+
+    test('shrinks the font until the text fits the icon width', () => {
+      const ctx = {
+        beginPath: jest.fn(),
+        roundRect: jest.fn(),
+        fill: jest.fn(),
+        fillText: jest.fn(),
+        // Report the text as fitting only once the font is 14px or smaller.
+        measureText: jest.fn(() => ({
+          width: parseInt(ctx.font.match(/\d+/)[0], 10) > 14 ? 40 : 20
+        })),
+        getImageData: jest.fn(() => ({}))
+      };
+      global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
+
+      renderCountdownIcon('9:59', '#ff0000');
+
+      expect(ctx.font).toBe('bold 14px sans-serif');
+    });
+  });
+
+  /**
+   * Tests for the countdown being rendered into the toolbar icon by
+   * UpdateBadges, with the default hourglass restored when timers go away.
+   */
+  describe('countdown icon updates', () => {
+    let ctx;
+
+    beforeEach(() => {
+      chrome.runtime.lastError = null;
+      jest.clearAllMocks();
+      jest.useFakeTimers();
+      ctx = {
+        beginPath: jest.fn(),
+        roundRect: jest.fn(),
+        fill: jest.fn(),
+        fillText: jest.fn(),
+        measureText: jest.fn(() => ({ width: 20 })),
+        getImageData: jest.fn(() => ({ width: 32, height: 32 }))
+      };
+      global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
+    });
+
+    afterEach(() => {
+      delete global.OffscreenCanvas;
+      jest.useRealTimers();
+    });
+
+    test('draws the countdown into the toolbar icon and keeps the badge empty', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: now.getTime() + 1784000 } // 29m 44s
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) => callback({ id: 123 }));
+
+      await UpdateBadges();
+
+      expect(ctx.fillText).toHaveBeenCalledWith('29m', 16, 17);
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, imageData: { 32: { width: 32, height: 32 } } },
+        expect.any(Function)
+      );
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 123, text: '' },
+        expect.any(Function)
+      );
+    });
+
+    test('restores the default icon when a tracked timer goes away', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: now.getTime() + 60000 }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) => callback({ id: 123 }));
+      await UpdateBadges();
+
+      chrome.alarms.getAll.mockImplementation(callback => callback([]));
+      await UpdateBadges();
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: expect.objectContaining({ 32: '/icons/hourglass32.png' }) },
+        expect.any(Function)
+      );
+    });
+
+    test('pauseVideoOnPage restores the default toolbar icon', async() => {
+      chrome.scripting.executeScript.mockImplementation((options, callback) => callback([]));
+
+      await pauseVideoOnPage(123);
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: expect.objectContaining({ 32: '/icons/hourglass32.png' }) },
+        expect.any(Function)
+      );
     });
   });
 

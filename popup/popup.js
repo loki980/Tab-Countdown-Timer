@@ -22,6 +22,15 @@ if (typeof chrome === 'undefined' && ChromeAPIWrapper) {
   }
 }
 
+// Mirrors DEFAULT_ICON_PATHS in background.js: restores the hourglass after
+// the toolbar icon has shown a rendered countdown.
+const DEFAULT_ICON_PATHS = {
+  16: '/icons/hourglass16.png',
+  32: '/icons/hourglass32.png',
+  48: '/icons/hourglass48.png',
+  128: '/icons/hourglass128.png'
+};
+
 let hasInitialized = false;
 
 const initPopup = function() {
@@ -347,6 +356,9 @@ const initPopup = function() {
 
         if (isPaused) {
           await chrome.alarms.clear(tabKey);
+          // The background restores the icon too, but only while awake —
+          // do it here so the change is immediate.
+          await chrome.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
           await chrome.action.setBadgeBackgroundColor({
             tabId: tabId,
             color: '#666666'
@@ -676,6 +688,7 @@ const initPopup = function() {
       const tabKey = tabs[0].id.toString();
       const urlKey = normalizeUrlForStorage(tabs[0].url);
 
+      await chrome.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
       await chrome.action.setBadgeText({ tabId: tabId, text: '' });
       await chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#666666' });
       await chrome.alarms.clear(tabKey);
