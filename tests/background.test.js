@@ -10,6 +10,7 @@ const {
   pauseVideoOnPage,
   getVideoSiteContext,
   renderCountdownIcon,
+  formatCountdownParts,
   FormatExactDuration
 } = require('../background/background.js');
 
@@ -96,6 +97,34 @@ describe('Background Script Utility Functions', () => {
   });
 
   /**
+   * Tests for formatCountdownParts, which reduces the remaining time to a
+   * 1-2 digit value plus a unit so the icon digits render as large as
+   * possible at toolbar size.
+   */
+  describe('formatCountdownParts', () => {
+    test('shows seconds under a minute', () => {
+      expect(formatCountdownParts(45000)).toEqual({ value: '45', unit: 'sec' });
+      expect(formatCountdownParts(1000)).toEqual({ value: '1', unit: 'sec' });
+    });
+
+    test('shows whole minutes up to 99', () => {
+      expect(formatCountdownParts(60000)).toEqual({ value: '1', unit: 'min' });
+      expect(formatCountdownParts(1784000)).toEqual({ value: '29', unit: 'min' });
+      expect(formatCountdownParts(3600000)).toEqual({ value: '60', unit: 'min' });
+      expect(formatCountdownParts(5940000)).toEqual({ value: '99', unit: 'min' });
+    });
+
+    test('shows rounded hours above 99 minutes', () => {
+      expect(formatCountdownParts(6000000)).toEqual({ value: '2', unit: 'hr' }); // 100 min
+      expect(formatCountdownParts(86400000)).toEqual({ value: '24', unit: 'hr' });
+    });
+
+    test('returns "?" with no unit for negative durations', () => {
+      expect(formatCountdownParts(-1000)).toEqual({ value: '?', unit: '' });
+    });
+  });
+
+  /**
    * Tests for renderCountdownIcon, which draws the remaining time into the
    * toolbar icon because the browser badge only fits ~4 tiny characters.
    */
@@ -105,10 +134,10 @@ describe('Background Script Utility Functions', () => {
     });
 
     test('returns null when OffscreenCanvas is unavailable', () => {
-      expect(renderCountdownIcon('29m', '#666666')).toBeNull();
+      expect(renderCountdownIcon('29', 'min', '#666666')).toBeNull();
     });
 
-    test('draws the text on a colored plate and returns its image data', () => {
+    test('stacks big digits over a small unit label and returns image data', () => {
       const imageData = { width: 32, height: 32 };
       const ctx = {
         beginPath: jest.fn(),
@@ -120,15 +149,33 @@ describe('Background Script Utility Functions', () => {
       };
       global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
 
-      const result = renderCountdownIcon('29m', '#666666');
+      const result = renderCountdownIcon('29', 'min', '#666666');
 
       expect(result).toBe(imageData);
       expect(ctx.roundRect).toHaveBeenCalledWith(0, 0, 32, 32, 7);
-      expect(ctx.fillText).toHaveBeenCalledWith('29m', 16, 17);
+      expect(ctx.fillText).toHaveBeenCalledWith('29', 16, 13);
+      expect(ctx.fillText).toHaveBeenCalledWith('min', 16, 27);
       expect(ctx.getImageData).toHaveBeenCalledWith(0, 0, 32, 32);
     });
 
-    test('shrinks the font until the text fits the icon width', () => {
+    test('centers the value and skips the unit line when there is no unit', () => {
+      const ctx = {
+        beginPath: jest.fn(),
+        roundRect: jest.fn(),
+        fill: jest.fn(),
+        fillText: jest.fn(),
+        measureText: jest.fn(() => ({ width: 10 })),
+        getImageData: jest.fn(() => ({}))
+      };
+      global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
+
+      renderCountdownIcon('?', '', '#666666');
+
+      expect(ctx.fillText).toHaveBeenCalledTimes(1);
+      expect(ctx.fillText).toHaveBeenCalledWith('?', 16, 17);
+    });
+
+    test('shrinks the value font until it fits the icon width', () => {
       const ctx = {
         beginPath: jest.fn(),
         roundRect: jest.fn(),
@@ -142,7 +189,7 @@ describe('Background Script Utility Functions', () => {
       };
       global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
 
-      renderCountdownIcon('9:59', '#ff0000');
+      renderCountdownIcon('100', '', '#ff0000');
 
       expect(ctx.font).toBe('bold 14px sans-serif');
     });
@@ -185,7 +232,8 @@ describe('Background Script Utility Functions', () => {
 
       await UpdateBadges();
 
-      expect(ctx.fillText).toHaveBeenCalledWith('29m', 16, 17);
+      expect(ctx.fillText).toHaveBeenCalledWith('29', 16, 13);
+      expect(ctx.fillText).toHaveBeenCalledWith('min', 16, 27);
       expect(chrome.action.setIcon).toHaveBeenCalledWith(
         { tabId: 123, imageData: { 32: { width: 32, height: 32 } } },
         expect.any(Function)
@@ -194,6 +242,28 @@ describe('Background Script Utility Functions', () => {
         { tabId: 123, text: '' },
         expect.any(Function)
       );
+    });
+
+    test('shows seconds on a red plate during the final minute', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: now.getTime() + 45000 }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) => callback({ id: 123 }));
+      const fillStyles = [];
+      Object.defineProperty(ctx, 'fillStyle', {
+        set: (value) => {
+          fillStyles.push(value);
+        },
+        get: () => fillStyles[fillStyles.length - 1]
+      });
+
+      await UpdateBadges();
+
+      expect(ctx.fillText).toHaveBeenCalledWith('45', 16, 13);
+      expect(ctx.fillText).toHaveBeenCalledWith('sec', 16, 27);
+      expect(fillStyles[0]).toBe('#ff0000');
     });
 
     test('restores the default icon when a tracked timer goes away', async() => {
