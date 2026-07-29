@@ -46,6 +46,14 @@ const createChromeMocks = () => {
       setBadgeText: jest.fn((options, callback) => {
         if (callback) callback();
         return Promise.resolve();
+      }),
+      setIcon: jest.fn((options, callback) => {
+        if (callback) callback();
+        return Promise.resolve();
+      }),
+      setTitle: jest.fn((options, callback) => {
+        if (callback) callback();
+        return Promise.resolve();
       })
     },
     storage: {

@@ -2,7 +2,7 @@
     "name": "Tab Countdown Timer",
     "version": "1.6.1",
     "manifest_version": 3,
-    "description": "A Chromium Extension that allows you to set a timer that counts down and then closes the tab.",
+    "description": "A browser extension that allows you to set a timer that counts down and then closes the tab.",
     "icons": {
         "16": "icons/hourglass16.png",
         "32": "icons/hourglass32.png",
@@ -13,7 +13,17 @@
         "default_popup": "popup/popup.html"
     },
     "background": {
-        "service_worker": "background/background.js"
+        "service_worker": "background/background.js",
+        "scripts": ["background/background.js"]
+    },
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "tab-countdown-timer@loki980.github.io",
+            "strict_min_version": "140.0",
+            "data_collection_permissions": {
+                "required": ["none"]
+            }
+        }
     },
     "permissions": [
         "alarms",

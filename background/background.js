@@ -162,6 +162,37 @@ const ChromeAPIWrapper = {
           resolve();
         }
       });
+    },
+    // Sets the extension's toolbar icon for a tab. Errors (e.g., tab closed)
+    // are ignored, matching the badge setters above.
+    setIcon: (options) => {
+      return new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.action && chrome.action.setIcon) {
+          chrome.action.setIcon(options, () => {
+            if (chrome.runtime.lastError) {
+              // Silently ignore - tab may have been closed
+            }
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
+    },
+    // Sets the toolbar icon tooltip for a tab, ignoring errors like above.
+    setTitle: (options) => {
+      return new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.action && chrome.action.setTitle) {
+          chrome.action.setTitle(options, () => {
+            if (chrome.runtime.lastError) {
+              // Silently ignore - tab may have been closed
+            }
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
     }
   },
   storage: {
@@ -318,15 +349,111 @@ function FormatDuration(d) {
     return x < 10 ? '0' + x : x;
   }
 
-  if (totalSeconds < 3600) {
+  // Badge text only fits ~4 characters (Firefox truncates anything longer),
+  // so each tier below stays within that width.
+  if (totalSeconds < 600) {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return minutes + ':' + pad(seconds);
   }
+  if (totalSeconds < 3600) {
+    return Math.floor(totalSeconds / 60) + 'm';
+  }
+  const hours = Math.floor(totalSeconds / 3600);
+  if (hours < 10) {
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return hours + ':' + pad(minutes);
+  }
+  return hours + 'h';
+}
+
+// Un-abbreviated countdown for the icon tooltip: M:SS below an hour,
+// H:MM:SS from an hour up. Same Math.ceil convention as FormatDuration.
+function FormatExactDuration(d) {
+  if (d < 0) {
+    return '?';
+  }
+  const totalSeconds = Math.ceil(d / 1000);
+  function pad(x) {
+    return x < 10 ? '0' + x : x;
+  }
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return hours + ':' + pad(minutes);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return hours + ':' + pad(minutes) + ':' + pad(seconds);
+  }
+  return minutes + ':' + pad(seconds);
 }
+
+const ICON_SIZE = 32;
+const DEFAULT_ICON_TITLE = 'Tab Countdown Timer';
+const DEFAULT_ICON_PATHS = {
+  16: '/icons/hourglass16.png',
+  32: '/icons/hourglass32.png',
+  48: '/icons/hourglass48.png',
+  128: '/icons/hourglass128.png'
+};
+
+// Reduces the remaining time to at most three characters so the icon
+// digits render as large as possible at toolbar size. A text unit label
+// proved unreadable at that size, so the unit is implied instead: red
+// digits are ticking seconds (final minute), plain digits are minutes,
+// and hours carry an "h" suffix. The tooltip keeps the exact countdown.
+function formatIconText(d) {
+  if (d < 0) {
+    return '?';
+  }
+  const totalSeconds = Math.ceil(d / 1000);
+  if (totalSeconds < 60) {
+    return String(totalSeconds);
+  }
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes <= 99) {
+    return String(totalMinutes);
+  }
+  return Math.round(totalMinutes / 60) + 'h';
+}
+
+// Draws the remaining time onto a badge-colored plate the size of the
+// toolbar icon. The browser badge is too small for this text (Firefox
+// truncates at ~4 tiny characters), so the countdown is rendered into the
+// icon itself, where the digits can use the full icon area. Returns null
+// when OffscreenCanvas is unavailable so callers can fall back to badge
+// text.
+function renderCountdownIcon(text, color) {
+  if (typeof OffscreenCanvas === 'undefined') {
+    return null;
+  }
+  const canvas = new OffscreenCanvas(ICON_SIZE, ICON_SIZE);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    return null;
+  }
+
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, ICON_SIZE, ICON_SIZE, 7);
+  ctx.fill();
+
+  // Largest bold font that keeps the text inside the plate.
+  let fontSize = 24;
+  ctx.font = 'bold ' + fontSize + 'px sans-serif';
+  while (fontSize > 8 && ctx.measureText(text).width > ICON_SIZE - 4) {
+    fontSize--;
+    ctx.font = 'bold ' + fontSize + 'px sans-serif';
+  }
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, ICON_SIZE / 2, ICON_SIZE / 2 + 1);
+  return ctx.getImageData(0, 0, ICON_SIZE, ICON_SIZE);
+}
+
+// Tabs whose toolbar icon currently shows a rendered countdown, so the
+// default hourglass can be restored when their timer goes away.
+const countdownIconTabs = new Set();
 
 // Pauses the first HTML5 <video> element on the page. Used for YouTube and
 // Twitch when the user picked "Pause video" instead of "Close tab".
@@ -341,7 +468,10 @@ async function pauseVideoOnPage(tabId) {
         }
       }
     });
-    // Clear the badge text and reset color after pausing
+    // Restore the default icon and clear the badge after pausing
+    countdownIconTabs.delete(tabId);
+    await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+    await ChromeAPIWrapper.action.setTitle({ tabId: tabId, title: DEFAULT_ICON_TITLE });
     await ChromeAPIWrapper.action.setBadgeText({ 'tabId': tabId, 'text': '' });
     ChromeAPIWrapper.action.setBadgeBackgroundColor({
       'tabId': tabId,
@@ -445,28 +575,72 @@ async function UpdateBadges() {
   try {
     const alarms = await ChromeAPIWrapper.alarms.getAll();
 
+    // Restore the default icon on tabs whose timer went away (canceled or
+    // paused from the popup) while the icon still showed a countdown.
+    const alarmTabIds = new Set(alarms.map((alarm) => parseInt(alarm.name)));
+    for (const tabId of Array.from(countdownIconTabs)) {
+      if (!alarmTabIds.has(tabId)) {
+        countdownIconTabs.delete(tabId);
+        await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+        await ChromeAPIWrapper.action.setTitle({ tabId: tabId, title: DEFAULT_ICON_TITLE });
+      }
+    }
+
     for (const alarm of alarms) {
       const tabId = parseInt(alarm.name);
-      const tabExists = await ChromeAPIWrapper.tabs.exists(tabId);
+      let tab = null;
+      try {
+        tab = await ChromeAPIWrapper.tabs.get(tabId);
+      } catch {
+        tab = null;
+      }
 
-      if (tabExists) {
+      if (tab) {
         const timeRemaining = alarm.scheduledTime - now;
-        const description = FormatDuration(timeRemaining);
-
-        // Update badge text
-        await ChromeAPIWrapper.action.setBadgeText({
-          'tabId': tabId,
-          'text': description
-        });
 
         // Match the popup's warning threshold by ceiling sub-second
         // remainders the same way it does.
         const secondsRemaining = Math.ceil(timeRemaining / 1000);
         const badgeColor = secondsRemaining <= 30 ? '#ff0000' : '#666666';
-        ChromeAPIWrapper.action.setBadgeBackgroundColor({
-          'tabId': tabId,
-          'color': badgeColor
+
+        // Tooltip carries the exact countdown and the scheduled outcome,
+        // since the icon only fits an abbreviated time.
+        const data = await ChromeAPIWrapper.storage.local.get(tabId + '_action');
+        const action = data[tabId + '_action'] || 'close';
+        const willPause = !!(tab.url && getVideoSiteContext(tab.url)) && action === 'pause';
+        const endTime = new Date(alarm.scheduledTime)
+          .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        await ChromeAPIWrapper.action.setTitle({
+          tabId: tabId,
+          title: FormatExactDuration(timeRemaining) + ' remaining\n'
+            + (willPause ? 'Pauses video' : 'Closes tab') + ' at ' + endTime
         });
+
+        // The icon plate goes red for the whole seconds-mode final minute,
+        // matching the switch to a ticking seconds display.
+        const plateColor = secondsRemaining < 60 ? '#ff0000' : '#666666';
+
+        const imageData = renderCountdownIcon(formatIconText(timeRemaining), plateColor);
+        if (imageData) {
+          // Draw the countdown into the toolbar icon and keep the badge
+          // empty; the badge is too small to show the text un-truncated.
+          await ChromeAPIWrapper.action.setIcon({
+            tabId: tabId,
+            imageData: { [ICON_SIZE]: imageData }
+          });
+          await ChromeAPIWrapper.action.setBadgeText({ tabId: tabId, text: '' });
+          countdownIconTabs.add(tabId);
+        } else {
+          // No OffscreenCanvas available: fall back to badge text.
+          await ChromeAPIWrapper.action.setBadgeText({
+            'tabId': tabId,
+            'text': FormatDuration(timeRemaining)
+          });
+          ChromeAPIWrapper.action.setBadgeBackgroundColor({
+            'tabId': tabId,
+            'color': badgeColor
+          });
+        }
       } else {
         // If tab does not exist, clear the alarm
         await ChromeAPIWrapper.alarms.clear(alarm.name);
@@ -663,10 +837,13 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     FormatDuration,
+    FormatExactDuration,
     ChromeAPIWrapper,
     HandleRemove,
     UpdateBadges: UpdateBadges,
     pauseVideoOnPage,
+    renderCountdownIcon,
+    formatIconText,
     getMillisecondsUntil10PM,
     getMillisecondsUntilTime,
     setYouTubeTimer,

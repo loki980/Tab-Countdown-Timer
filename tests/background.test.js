@@ -8,7 +8,10 @@ const {
   setYouTubeTimer,
   checkAndSetYouTubeTimers,
   pauseVideoOnPage,
-  getVideoSiteContext
+  getVideoSiteContext,
+  renderCountdownIcon,
+  formatIconText,
+  FormatExactDuration
 } = require('../background/background.js');
 
 const alarmListeners = chrome.alarms.onAlarm.addListener.mock.calls.map(call => call[0]);
@@ -25,15 +28,26 @@ describe('Background Script Utility Functions', () => {
    * Verifies correct formatting of time durations in different scenarios
    */
   describe('FormatDuration', () => {
-    // Test that durations less than an hour are formatted as MM:SS
-    test('formats duration less than an hour correctly', () => {
+    // Test that durations less than ten minutes are formatted as M:SS
+    test('formats duration less than ten minutes correctly', () => {
       expect(FormatDuration(65000)).toBe('1:05'); // 1 minute 5 seconds
       expect(FormatDuration(30000)).toBe('0:30'); // 30 seconds
+      expect(FormatDuration(599000)).toBe('9:59'); // just under ten minutes
+    });
+
+    // Badge text only fits ~4 characters (Firefox truncates hard), so
+    // 10-59 minutes show whole minutes instead of M:SS.
+    test('formats ten minutes to an hour as whole minutes', () => {
+      expect(FormatDuration(600000)).toBe('10m');  // exactly ten minutes
+      expect(FormatDuration(1784000)).toBe('29m'); // 29 minutes 44 seconds
+      expect(FormatDuration(1800000)).toBe('30m'); // exactly thirty minutes
+      expect(FormatDuration(3599000)).toBe('59m'); // just under an hour
     });
 
     // Test that durations more than an hour are formatted correctly
     test('formats duration more than an hour correctly', () => {
       expect(FormatDuration(3665000)).toBe('1:01'); // 1 hour 1 minute
+      expect(FormatDuration(35940000)).toBe('9:59'); // 9 hours 59 minutes
     });
 
     // Test that negative durations return a question mark
@@ -46,9 +60,11 @@ describe('Background Script Utility Functions', () => {
       expect(FormatDuration(0)).toBe('0:00');
     });
 
-    // Test that very large durations are formatted correctly
-    test('formats very large durations correctly', () => {
-      expect(FormatDuration(72000000)).toBe('20:00'); // 20 hours
+    // Ten hours and up show whole hours so the badge stays within
+    // ~4 characters ("20:00" would truncate to "20:0" on Firefox).
+    test('formats very large durations as whole hours', () => {
+      expect(FormatDuration(36000000)).toBe('10h'); // exactly ten hours
+      expect(FormatDuration(72000000)).toBe('20h'); // 20 hours
     });
 
     // Sub-second remainders ceil up so the badge agrees with the popup
@@ -58,6 +74,273 @@ describe('Background Script Utility Functions', () => {
       expect(FormatDuration(299500)).toBe('5:00'); // 4m 59.5s -> 5:00
       expect(FormatDuration(299000)).toBe('4:59'); // exactly one full second below 5m
       expect(FormatDuration(4500)).toBe('0:05');   // 4.5s -> 0:05
+    });
+  });
+
+  /**
+   * Tests for FormatExactDuration, the tooltip's un-abbreviated countdown.
+   */
+  describe('FormatExactDuration', () => {
+    test('formats sub-hour durations as M:SS', () => {
+      expect(FormatExactDuration(1784000)).toBe('29:44');
+      expect(FormatExactDuration(30000)).toBe('0:30');
+    });
+
+    test('formats durations with hours as H:MM:SS', () => {
+      expect(FormatExactDuration(3665000)).toBe('1:01:05');
+      expect(FormatExactDuration(36615000)).toBe('10:10:15');
+    });
+
+    test('returns "?" for negative durations', () => {
+      expect(FormatExactDuration(-1000)).toBe('?');
+    });
+  });
+
+  /**
+   * Tests for formatIconText, which reduces the remaining time to at most
+   * three characters so the icon digits render as large as possible at
+   * toolbar size. A text label proved unreadable at that size, so the unit
+   * is implied: red digits are seconds, plain digits are minutes, and
+   * hours carry an "h" suffix.
+   */
+  describe('formatIconText', () => {
+    test('shows seconds under a minute', () => {
+      expect(formatIconText(45000)).toBe('45');
+      expect(formatIconText(1000)).toBe('1');
+    });
+
+    test('shows whole minutes up to 99', () => {
+      expect(formatIconText(60000)).toBe('1');
+      expect(formatIconText(1784000)).toBe('29');
+      expect(formatIconText(3600000)).toBe('60');
+      expect(formatIconText(5940000)).toBe('99');
+    });
+
+    test('shows rounded hours with an h suffix above 99 minutes', () => {
+      expect(formatIconText(6000000)).toBe('2h'); // 100 min
+      expect(formatIconText(86400000)).toBe('24h');
+    });
+
+    test('returns "?" for negative durations', () => {
+      expect(formatIconText(-1000)).toBe('?');
+    });
+  });
+
+  /**
+   * Tests for renderCountdownIcon, which draws the remaining time into the
+   * toolbar icon because the browser badge only fits ~4 tiny characters.
+   */
+  describe('renderCountdownIcon', () => {
+    afterEach(() => {
+      delete global.OffscreenCanvas;
+    });
+
+    test('returns null when OffscreenCanvas is unavailable', () => {
+      expect(renderCountdownIcon('29', '#666666')).toBeNull();
+    });
+
+    test('draws centered digits on a colored plate and returns image data', () => {
+      const imageData = { width: 32, height: 32 };
+      const ctx = {
+        beginPath: jest.fn(),
+        roundRect: jest.fn(),
+        fill: jest.fn(),
+        fillText: jest.fn(),
+        measureText: jest.fn(() => ({ width: 20 })),
+        getImageData: jest.fn(() => imageData)
+      };
+      global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
+
+      const result = renderCountdownIcon('29', '#666666');
+
+      expect(result).toBe(imageData);
+      expect(ctx.roundRect).toHaveBeenCalledWith(0, 0, 32, 32, 7);
+      expect(ctx.fillText).toHaveBeenCalledTimes(1);
+      expect(ctx.fillText).toHaveBeenCalledWith('29', 16, 17);
+      expect(ctx.getImageData).toHaveBeenCalledWith(0, 0, 32, 32);
+    });
+
+    test('shrinks the font until the text fits the icon width', () => {
+      const ctx = {
+        beginPath: jest.fn(),
+        roundRect: jest.fn(),
+        fill: jest.fn(),
+        fillText: jest.fn(),
+        // Report the text as fitting only once the font is 14px or smaller.
+        measureText: jest.fn(() => ({
+          width: parseInt(ctx.font.match(/\d+/)[0], 10) > 14 ? 40 : 20
+        })),
+        getImageData: jest.fn(() => ({}))
+      };
+      global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
+
+      renderCountdownIcon('24h', '#ff0000');
+
+      expect(ctx.font).toBe('bold 14px sans-serif');
+    });
+  });
+
+  /**
+   * Tests for the countdown being rendered into the toolbar icon by
+   * UpdateBadges, with the default hourglass restored when timers go away.
+   */
+  describe('countdown icon updates', () => {
+    let ctx;
+
+    beforeEach(() => {
+      chrome.runtime.lastError = null;
+      jest.clearAllMocks();
+      jest.useFakeTimers();
+      ctx = {
+        beginPath: jest.fn(),
+        roundRect: jest.fn(),
+        fill: jest.fn(),
+        fillText: jest.fn(),
+        measureText: jest.fn(() => ({ width: 20 })),
+        getImageData: jest.fn(() => ({ width: 32, height: 32 }))
+      };
+      global.OffscreenCanvas = jest.fn(() => ({ getContext: () => ctx }));
+    });
+
+    afterEach(() => {
+      delete global.OffscreenCanvas;
+      jest.useRealTimers();
+    });
+
+    test('draws the countdown into the toolbar icon and keeps the badge empty', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: now.getTime() + 1784000 } // 29m 44s
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) => callback({ id: 123 }));
+
+      await UpdateBadges();
+
+      expect(ctx.fillText).toHaveBeenCalledWith('29', 16, 17);
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, imageData: { 32: { width: 32, height: 32 } } },
+        expect.any(Function)
+      );
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 123, text: '' },
+        expect.any(Function)
+      );
+    });
+
+    test('shows seconds on a red plate during the final minute', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: now.getTime() + 45000 }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) => callback({ id: 123 }));
+      const fillStyles = [];
+      Object.defineProperty(ctx, 'fillStyle', {
+        set: (value) => {
+          fillStyles.push(value);
+        },
+        get: () => fillStyles[fillStyles.length - 1]
+      });
+
+      await UpdateBadges();
+
+      expect(ctx.fillText).toHaveBeenCalledWith('45', 16, 17);
+      expect(fillStyles[0]).toBe('#ff0000');
+    });
+
+    test('restores the default icon when a tracked timer goes away', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: now.getTime() + 60000 }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) => callback({ id: 123 }));
+      await UpdateBadges();
+
+      chrome.alarms.getAll.mockImplementation(callback => callback([]));
+      await UpdateBadges();
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: expect.objectContaining({ 32: '/icons/hourglass32.png' }) },
+        expect.any(Function)
+      );
+    });
+
+    test('pauseVideoOnPage restores the default toolbar icon', async() => {
+      chrome.scripting.executeScript.mockImplementation((options, callback) => callback([]));
+
+      await pauseVideoOnPage(123);
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: expect.objectContaining({ 32: '/icons/hourglass32.png' }) },
+        expect.any(Function)
+      );
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: 'Tab Countdown Timer' },
+        expect.any(Function)
+      );
+    });
+
+    test('tooltip shows exact remaining time and when the tab closes', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      const scheduledTime = now.getTime() + 1784000; // 29m 44s
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: scheduledTime }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) =>
+        callback({ id: 123, url: 'https://example.com' }));
+
+      await UpdateBadges();
+
+      const endTime = new Date(scheduledTime)
+        .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: `29:44 remaining\nCloses tab at ${endTime}` },
+        expect.any(Function)
+      );
+    });
+
+    test('tooltip says the video pauses when that action is selected', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      const scheduledTime = now.getTime() + 65000; // 1m 5s
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: scheduledTime }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) =>
+        callback({ id: 123, url: 'https://www.youtube.com/watch?v=abc123' }));
+      chrome.storage.local.get.mockImplementation((key, callback) =>
+        callback({ '123_action': 'pause' }));
+
+      await UpdateBadges();
+
+      const endTime = new Date(scheduledTime)
+        .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: `1:05 remaining\nPauses video at ${endTime}` },
+        expect.any(Function)
+      );
+    });
+
+    test('tooltip resets when a tracked timer goes away', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: now.getTime() + 60000 }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) =>
+        callback({ id: 123, url: 'https://example.com' }));
+      await UpdateBadges();
+
+      chrome.alarms.getAll.mockImplementation(callback => callback([]));
+      await UpdateBadges();
+
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: 'Tab Countdown Timer' },
+        expect.any(Function)
+      );
     });
   });
 
@@ -448,15 +731,16 @@ describe('Background Script Utility Functions', () => {
       }];
 
       chrome.alarms.getAll.mockImplementation(callback => callback(mockAlarms));
-      const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockResolvedValue(false);
+      const getSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'get')
+        .mockRejectedValue(new Error('Tab not found'));
       const clearSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'clear').mockResolvedValue(true);
 
       await UpdateBadges();
 
-      expect(existsSpy).toHaveBeenCalledWith(999);
+      expect(getSpy).toHaveBeenCalledWith(999);
       expect(clearSpy).toHaveBeenCalledWith('999');
 
-      existsSpy.mockRestore();
+      getSpy.mockRestore();
       clearSpy.mockRestore();
     });
   });
