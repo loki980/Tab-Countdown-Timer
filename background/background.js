@@ -318,14 +318,22 @@ function FormatDuration(d) {
     return x < 10 ? '0' + x : x;
   }
 
-  if (totalSeconds < 3600) {
+  // Badge text only fits ~4 characters (Firefox truncates anything longer),
+  // so each tier below stays within that width.
+  if (totalSeconds < 600) {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return minutes + ':' + pad(seconds);
   }
+  if (totalSeconds < 3600) {
+    return Math.floor(totalSeconds / 60) + 'm';
+  }
   const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  return hours + ':' + pad(minutes);
+  if (hours < 10) {
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    return hours + ':' + pad(minutes);
+  }
+  return hours + 'h';
 }
 
 // Pauses the first HTML5 <video> element on the page. Used for YouTube and
