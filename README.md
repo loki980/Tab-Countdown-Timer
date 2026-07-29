@@ -3,7 +3,7 @@
 [![Chrome Web Store](https://developer.chrome.com/static/docs/webstore/branding/image/206x58-chrome-web-bcb82d15b2486.png)](https://chrome.google.com/webstore/detail/tab-countdown-timer/maoljenpfpdblggdbnhmegofbhhcdgle)
 [![Microsoft Edge Add-ons](https://get.microsoft.com/images/en-us%20dark.svg)](https://microsoftedge.microsoft.com/addons/detail/tab-countdown-timer/mmocngnpdhbhikbhonekemkafnkccgan)
 
-A productivity-focused Chromium browser extension (Chrome, Edge, Brave) that helps manage time spent on tabs by allowing users to set custom countdown timers. When the timer expires, the tab closes or (for YouTube) pauses the video automatically. Ideal for avoiding endless browsing and promoting focused sessions.
+A productivity-focused browser extension (Chrome, Edge, Brave, Firefox) that helps manage time spent on tabs by allowing users to set custom countdown timers. When the timer expires, the tab closes or (for YouTube) pauses the video automatically. Ideal for avoiding endless browsing and promoting focused sessions.
 
 ## Features
 
@@ -35,6 +35,13 @@ Follow the prompts to add the extension.
 3. Enable "Developer mode" (top-right toggle).
 4. Click "Load unpacked" and select the project root directory.
 5. The extension icon (hourglass) will appear in your toolbar.
+
+### Firefox (and Firefox-based browsers like Zen)
+1. Open `about:debugging#/runtime/this-firefox`.
+2. Click "Load Temporary Add-on…" and select `manifest.json` in the project root.
+3. The extension loads until the browser restarts (permanent installs require signing through [addons.mozilla.org](https://addons.mozilla.org)).
+
+Firefox 140 or newer is required. Chrome runs the background script as a service worker (`background.service_worker`), while Firefox runs it as an event page (`background.scripts`); both keys are declared in `manifest.json`.
 
 ## Permissions
 
