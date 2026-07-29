@@ -178,6 +178,21 @@ const ChromeAPIWrapper = {
           resolve();
         }
       });
+    },
+    // Sets the toolbar icon tooltip for a tab, ignoring errors like above.
+    setTitle: (options) => {
+      return new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.action && chrome.action.setTitle) {
+          chrome.action.setTitle(options, () => {
+            if (chrome.runtime.lastError) {
+              // Silently ignore - tab may have been closed
+            }
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
     }
   },
   storage: {
@@ -352,7 +367,27 @@ function FormatDuration(d) {
   return hours + 'h';
 }
 
+// Un-abbreviated countdown for the icon tooltip: M:SS below an hour,
+// H:MM:SS from an hour up. Same Math.ceil convention as FormatDuration.
+function FormatExactDuration(d) {
+  if (d < 0) {
+    return '?';
+  }
+  const totalSeconds = Math.ceil(d / 1000);
+  function pad(x) {
+    return x < 10 ? '0' + x : x;
+  }
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return hours + ':' + pad(minutes) + ':' + pad(seconds);
+  }
+  return minutes + ':' + pad(seconds);
+}
+
 const ICON_SIZE = 32;
+const DEFAULT_ICON_TITLE = 'Tab Countdown Timer';
 const DEFAULT_ICON_PATHS = {
   16: '/icons/hourglass16.png',
   32: '/icons/hourglass32.png',
@@ -415,6 +450,7 @@ async function pauseVideoOnPage(tabId) {
     // Restore the default icon and clear the badge after pausing
     countdownIconTabs.delete(tabId);
     await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+    await ChromeAPIWrapper.action.setTitle({ tabId: tabId, title: DEFAULT_ICON_TITLE });
     await ChromeAPIWrapper.action.setBadgeText({ 'tabId': tabId, 'text': '' });
     ChromeAPIWrapper.action.setBadgeBackgroundColor({
       'tabId': tabId,
@@ -525,14 +561,20 @@ async function UpdateBadges() {
       if (!alarmTabIds.has(tabId)) {
         countdownIconTabs.delete(tabId);
         await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+        await ChromeAPIWrapper.action.setTitle({ tabId: tabId, title: DEFAULT_ICON_TITLE });
       }
     }
 
     for (const alarm of alarms) {
       const tabId = parseInt(alarm.name);
-      const tabExists = await ChromeAPIWrapper.tabs.exists(tabId);
+      let tab = null;
+      try {
+        tab = await ChromeAPIWrapper.tabs.get(tabId);
+      } catch {
+        tab = null;
+      }
 
-      if (tabExists) {
+      if (tab) {
         const timeRemaining = alarm.scheduledTime - now;
         const description = FormatDuration(timeRemaining);
 
@@ -540,6 +582,19 @@ async function UpdateBadges() {
         // remainders the same way it does.
         const secondsRemaining = Math.ceil(timeRemaining / 1000);
         const badgeColor = secondsRemaining <= 30 ? '#ff0000' : '#666666';
+
+        // Tooltip carries the exact countdown and the scheduled outcome,
+        // since the icon only fits an abbreviated time.
+        const data = await ChromeAPIWrapper.storage.local.get(tabId + '_action');
+        const action = data[tabId + '_action'] || 'close';
+        const willPause = !!(tab.url && getVideoSiteContext(tab.url)) && action === 'pause';
+        const endTime = new Date(alarm.scheduledTime)
+          .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        await ChromeAPIWrapper.action.setTitle({
+          tabId: tabId,
+          title: FormatExactDuration(timeRemaining) + ' remaining\n'
+            + (willPause ? 'Pauses video' : 'Closes tab') + ' at ' + endTime
+        });
 
         const imageData = renderCountdownIcon(description, badgeColor);
         if (imageData) {
@@ -758,6 +813,7 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     FormatDuration,
+    FormatExactDuration,
     ChromeAPIWrapper,
     HandleRemove,
     UpdateBadges: UpdateBadges,

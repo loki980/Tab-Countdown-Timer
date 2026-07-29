@@ -359,6 +359,7 @@ const initPopup = function() {
           // The background restores the icon too, but only while awake —
           // do it here so the change is immediate.
           await chrome.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+          await chrome.action.setTitle({ tabId: tabId, title: 'Tab Countdown Timer' });
           await chrome.action.setBadgeBackgroundColor({
             tabId: tabId,
             color: '#666666'
@@ -689,6 +690,7 @@ const initPopup = function() {
       const urlKey = normalizeUrlForStorage(tabs[0].url);
 
       await chrome.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+      await chrome.action.setTitle({ tabId: tabId, title: 'Tab Countdown Timer' });
       await chrome.action.setBadgeText({ tabId: tabId, text: '' });
       await chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#666666' });
       await chrome.alarms.clear(tabKey);

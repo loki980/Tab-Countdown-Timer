@@ -50,6 +50,10 @@ const createChromeMocks = () => {
       setIcon: jest.fn((options, callback) => {
         if (callback) callback();
         return Promise.resolve();
+      }),
+      setTitle: jest.fn((options, callback) => {
+        if (callback) callback();
+        return Promise.resolve();
       })
     },
     storage: {

@@ -9,7 +9,8 @@ const {
   checkAndSetYouTubeTimers,
   pauseVideoOnPage,
   getVideoSiteContext,
-  renderCountdownIcon
+  renderCountdownIcon,
+  FormatExactDuration
 } = require('../background/background.js');
 
 const alarmListeners = chrome.alarms.onAlarm.addListener.mock.calls.map(call => call[0]);
@@ -72,6 +73,25 @@ describe('Background Script Utility Functions', () => {
       expect(FormatDuration(299500)).toBe('5:00'); // 4m 59.5s -> 5:00
       expect(FormatDuration(299000)).toBe('4:59'); // exactly one full second below 5m
       expect(FormatDuration(4500)).toBe('0:05');   // 4.5s -> 0:05
+    });
+  });
+
+  /**
+   * Tests for FormatExactDuration, the tooltip's un-abbreviated countdown.
+   */
+  describe('FormatExactDuration', () => {
+    test('formats sub-hour durations as M:SS', () => {
+      expect(FormatExactDuration(1784000)).toBe('29:44');
+      expect(FormatExactDuration(30000)).toBe('0:30');
+    });
+
+    test('formats durations with hours as H:MM:SS', () => {
+      expect(FormatExactDuration(3665000)).toBe('1:01:05');
+      expect(FormatExactDuration(36615000)).toBe('10:10:15');
+    });
+
+    test('returns "?" for negative durations', () => {
+      expect(FormatExactDuration(-1000)).toBe('?');
     });
   });
 
@@ -201,6 +221,71 @@ describe('Background Script Utility Functions', () => {
 
       expect(chrome.action.setIcon).toHaveBeenCalledWith(
         { tabId: 123, path: expect.objectContaining({ 32: '/icons/hourglass32.png' }) },
+        expect.any(Function)
+      );
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: 'Tab Countdown Timer' },
+        expect.any(Function)
+      );
+    });
+
+    test('tooltip shows exact remaining time and when the tab closes', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      const scheduledTime = now.getTime() + 1784000; // 29m 44s
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: scheduledTime }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) =>
+        callback({ id: 123, url: 'https://example.com' }));
+
+      await UpdateBadges();
+
+      const endTime = new Date(scheduledTime)
+        .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: `29:44 remaining\nCloses tab at ${endTime}` },
+        expect.any(Function)
+      );
+    });
+
+    test('tooltip says the video pauses when that action is selected', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      const scheduledTime = now.getTime() + 65000; // 1m 5s
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: scheduledTime }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) =>
+        callback({ id: 123, url: 'https://www.youtube.com/watch?v=abc123' }));
+      chrome.storage.local.get.mockImplementation((key, callback) =>
+        callback({ '123_action': 'pause' }));
+
+      await UpdateBadges();
+
+      const endTime = new Date(scheduledTime)
+        .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: `1:05 remaining\nPauses video at ${endTime}` },
+        expect.any(Function)
+      );
+    });
+
+    test('tooltip resets when a tracked timer goes away', async() => {
+      const now = new Date('2024-01-01T12:00:00');
+      jest.setSystemTime(now);
+      chrome.alarms.getAll.mockImplementation(callback => callback([
+        { name: '123', scheduledTime: now.getTime() + 60000 }
+      ]));
+      chrome.tabs.get.mockImplementation((tabId, callback) =>
+        callback({ id: 123, url: 'https://example.com' }));
+      await UpdateBadges();
+
+      chrome.alarms.getAll.mockImplementation(callback => callback([]));
+      await UpdateBadges();
+
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: 'Tab Countdown Timer' },
         expect.any(Function)
       );
     });
@@ -593,15 +678,16 @@ describe('Background Script Utility Functions', () => {
       }];
 
       chrome.alarms.getAll.mockImplementation(callback => callback(mockAlarms));
-      const existsSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'exists').mockResolvedValue(false);
+      const getSpy = jest.spyOn(ChromeAPIWrapper.tabs, 'get')
+        .mockRejectedValue(new Error('Tab not found'));
       const clearSpy = jest.spyOn(ChromeAPIWrapper.alarms, 'clear').mockResolvedValue(true);
 
       await UpdateBadges();
 
-      expect(existsSpy).toHaveBeenCalledWith(999);
+      expect(getSpy).toHaveBeenCalledWith(999);
       expect(clearSpy).toHaveBeenCalledWith('999');
 
-      existsSpy.mockRestore();
+      getSpy.mockRestore();
       clearSpy.mockRestore();
     });
   });
