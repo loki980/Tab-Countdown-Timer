@@ -9,7 +9,7 @@ A productivity-focused browser extension (Chrome, Edge, Brave, Firefox) that hel
 
 - **Custom Timers**: Set timers for any tab using hours (0-24) and minutes (0-59) via intuitive inputs.
 - **YouTube-Specific Actions**: For YouTube watch pages, choose to pause the video instead of closing the tab (default for YouTube).
-- **Real-Time Feedback**: While a timer runs, the toolbar hourglass is replaced by a rounded plate showing the remaining time in large digits with a smaller unit (e.g., "29m", "2h", or ticking seconds like "45s" on a red plate during the final minute). It updates every second and turns gray when paused. Hovering the icon shows the exact time left and when the tab closes or the video pauses.
+- **Real-Time Feedback**: While a timer runs, the toolbar hourglass is replaced by a rounded plate showing the remaining time in large digits with the unit as a word beneath them (e.g., "29" over "min", "2" over "hr", or ticking seconds like "45" over "sec" on a red plate during the final minute). It updates every second and turns gray when paused. Hovering the icon shows the exact time left and when the tab closes or the video pauses.
 - **Controls**: Pause/resume, cancel timers; supports multiple tabs simultaneously.
 - **Persistent Timers**: Running or paused timers are saved when tabs close and automatically restore when reopening the same URL (7-day expiration).
 - **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs. For YouTube, choose "This exact video" or "All YouTube videos". Supports duration mode (countdown from open) or time-of-day mode (expires at a specific time when you next open the URL).
@@ -58,7 +58,7 @@ The extension requests the following permissions in `manifest.json`:
 1. Click the extension icon (hourglass) in the browser toolbar to open the popup.
 2. Select a preset or enter hours/minutes (e.g., 0h 30m).
 3. For YouTube tabs, choose "Pause Video" or "Close Tab" via radio buttons.
-4. Click "Start timer" - the toolbar hourglass is replaced by a rounded plate showing the countdown (e.g., "29m").
+4. Click "Start timer" - the toolbar hourglass is replaced by a rounded plate showing the countdown (e.g., "29" over "min").
 5. **Pause/Resume**: Click the pause button. The plate turns gray and keeps the remaining time while paused.
 6. **Cancel**: Click "Cancel timer" to stop the timer and return the icon to the plain hourglass.
 7. On expiry: Tab closes (default) or video pauses (YouTube), and the icon returns to the plain hourglass.
@@ -81,7 +81,7 @@ The extension requests the following permissions in `manifest.json`:
 *(Add visual aids here if available: e.g., popup UI, toolbar countdown plate examples. Currently, no images in repo – consider adding.)*
 
 - Popup interface: Clean form with inputs, presets, and action options.
-- Toolbar icon: A rounded plate in place of the hourglass shows "29m" in slate, "45s" in red during the final minute, or gray when paused, and the plain hourglass returns after expiry.
+- Toolbar icon: A rounded plate in place of the hourglass shows "29" over "min" in slate, "45" over "sec" in red during the final minute, or gray when paused, and the plain hourglass returns after expiry.
 
 ## Project Structure
 

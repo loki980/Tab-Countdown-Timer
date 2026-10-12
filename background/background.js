@@ -371,10 +371,14 @@ const BADGE_COLOR_WARNING = '#ff0000';
 
 const ICON_DIGIT_COLOR = '#ffffff';
 const ICON_PLATE_STROKE = 'rgba(255,255,255,0.18)';
-const ICON_UNIT_SCALE = 0.7;
-const ICON_MAX_WIDTH = 0.94;
-const ICON_MAX_CAP = 0.68;
-const ICON_GAP = 0.02;
+const ICON_PLATE_RADIUS = 0.2;
+const ICON_DIGIT_MAX_WIDTH = 0.92;
+const ICON_DIGIT_MAX_CAP = 0.56;
+const ICON_UNIT_SCALE = 0.45;
+const ICON_UNIT_MAX_WIDTH = 0.86;
+const ICON_GAP = 0.06;
+// The unit letter from formatIconText is drawn as a word beneath the digits.
+const ICON_UNIT_WORDS = { m: 'min', s: 'sec', h: 'hr' };
 
 // Splits a label such as '28m' into its digits and unit. Labels without a
 // unit (such as '?') keep the whole text as digits.
@@ -387,44 +391,56 @@ function boldFont(size) {
   return 'bold ' + size + 'px sans-serif';
 }
 
-// Height of the digits above the baseline at the current font.
-function capHeight(ctx, fontSize) {
-  const ascent = ctx.measureText('8').actualBoundingBoxAscent;
-  return typeof ascent === 'number' ? ascent : 0.72 * fontSize;
+// Height of text above the baseline at the current font, or fallbackRatio
+// of the font size when the metric is missing.
+function ascentOf(ctx, text, fontSize, fallbackRatio) {
+  const ascent = ctx.measureText(text).actualBoundingBoxAscent;
+  return typeof ascent === 'number' ? ascent : fallbackRatio * fontSize;
 }
 
-// Digit size per icon size, fitted once to the widest label ('88' + 'm') so
-// the text does not change size as it ticks.
-const iconDigitSizes = new Map();
+// Text sizes per icon size, fitted once to the widest labels ('88' and the
+// widest unit word) so the text does not change size as it ticks. D is the
+// digit cap height and U the tallest unit word ascent.
+const iconTextLayouts = new Map();
 
-function iconDigitSize(ctx, S) {
-  if (!iconDigitSizes.has(S)) {
-    let size = Math.ceil(1.2 * S);
-    for (; size > 6; size--) {
-      ctx.font = boldFont(size);
-      const digitsWidth = ctx.measureText('88').width;
-      const cap = capHeight(ctx, size);
-      ctx.font = boldFont(Math.round(size * ICON_UNIT_SCALE));
-      const unitWidth = ctx.measureText('m').width;
-      if (digitsWidth + ICON_GAP * S + unitWidth <= ICON_MAX_WIDTH * S && cap <= ICON_MAX_CAP * S) {
+function iconTextLayout(ctx, S) {
+  if (!iconTextLayouts.has(S)) {
+    let digitSize = Math.ceil(S);
+    for (; digitSize > 6; digitSize--) {
+      ctx.font = boldFont(digitSize);
+      if (ctx.measureText('88').width <= ICON_DIGIT_MAX_WIDTH * S
+        && ascentOf(ctx, '8', digitSize, 0.72) <= ICON_DIGIT_MAX_CAP * S) {
         break;
       }
     }
-    iconDigitSizes.set(S, size);
+    ctx.font = boldFont(digitSize);
+    const D = ascentOf(ctx, '8', digitSize, 0.72);
+
+    const words = Object.values(ICON_UNIT_WORDS);
+    const widestWord = () => Math.max(...words.map((word) => ctx.measureText(word).width));
+    let unitSize = Math.round(ICON_UNIT_SCALE * digitSize);
+    ctx.font = boldFont(unitSize);
+    while (unitSize > 5 && widestWord() > ICON_UNIT_MAX_WIDTH * S) {
+      unitSize--;
+      ctx.font = boldFont(unitSize);
+    }
+    const U = Math.max(...words.map((word) => ascentOf(ctx, word, unitSize, 0.55)));
+
+    iconTextLayouts.set(S, { digitSize, D, unitSize, U });
   }
-  return iconDigitSizes.get(S);
+  return iconTextLayouts.get(S);
 }
 
-// Test hook: forget the fitted digit sizes so a test can fit them again.
+// Test hook: forget the fitted text sizes so a test can fit them again.
 function resetIconFitCache() {
-  iconDigitSizes.clear();
+  iconTextLayouts.clear();
 }
 
 // Fills the icon with a rounded plate in the state's gradient and a faint
 // light edge.
 function drawIconPlate(ctx, S, state) {
   ctx.beginPath();
-  ctx.roundRect(0, 0, S, S, 0.24 * S);
+  ctx.roundRect(0, 0, S, S, ICON_PLATE_RADIUS * S);
   const gradient = ctx.createLinearGradient(0, 0, 0, S);
   gradient.addColorStop(0, state.top);
   gradient.addColorStop(1, state.bottom);
@@ -432,41 +448,40 @@ function drawIconPlate(ctx, S, state) {
   ctx.fill();
 
   ctx.beginPath();
-  ctx.roundRect(0.5, 0.5, S - 1, S - 1, 0.24 * S);
+  ctx.roundRect(0.5, 0.5, S - 1, S - 1, ICON_PLATE_RADIUS * S);
   ctx.strokeStyle = ICON_PLATE_STROKE;
   ctx.lineWidth = 1;
   ctx.stroke();
 }
 
 // Draws the remaining time on a plate that fills the icon in place of the
-// hourglass: big white digits and a smaller unit, centered as a pair. The
-// browser badge is too narrow for the countdown (Firefox clips it after 2
-// to 3 characters), so the time is drawn as the icon itself.
+// hourglass: big white digits on top and the unit as a word centered
+// beneath them. The browser badge is too narrow for the countdown (Firefox
+// clips it after 2 to 3 characters), so the time is drawn as the icon itself.
 function drawCountdownIcon(ctx, S, text, state) {
   drawIconPlate(ctx, S, state);
 
   const [digits, unit] = splitIconText(text);
-  const digitSize = iconDigitSize(ctx, S);
-  const unitSize = Math.round(digitSize * ICON_UNIT_SCALE);
-  ctx.font = boldFont(digitSize);
-  const digitsWidth = ctx.measureText(digits).width;
-  const cap = capHeight(ctx, digitSize);
-  ctx.font = boldFont(unitSize);
-  const unitWidth = unit ? ctx.measureText(unit).width : 0;
-  const gap = unit ? ICON_GAP * S : 0;
-  const x = (S - (digitsWidth + gap + unitWidth)) / 2;
-  const baseline = S / 2 + cap / 2;
-
-  ctx.textAlign = 'left';
+  const { digitSize, D, unitSize, U } = iconTextLayout(ctx, S);
+  ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
+
+  if (!unit) {
+    // Digits only, centered on their own cap height.
+    ctx.font = boldFont(digitSize);
+    ctx.fillStyle = ICON_DIGIT_COLOR;
+    ctx.fillText(digits, S / 2, (S + D) / 2);
+    return;
+  }
+
+  const gap = ICON_GAP * S;
+  const top = (S - (D + gap + U)) / 2;
   ctx.font = boldFont(digitSize);
   ctx.fillStyle = ICON_DIGIT_COLOR;
-  ctx.fillText(digits, x, baseline);
-  if (unit) {
-    ctx.font = boldFont(unitSize);
-    ctx.fillStyle = state.unit;
-    ctx.fillText(unit, x + digitsWidth + gap, baseline);
-  }
+  ctx.fillText(digits, S / 2, top + D);
+  ctx.font = boldFont(unitSize);
+  ctx.fillStyle = state.unit;
+  ctx.fillText(ICON_UNIT_WORDS[unit] || unit, S / 2, top + D + gap + U);
 }
 
 // Renders the countdown icon at every size in ICON_SIZES. Resolves to the
