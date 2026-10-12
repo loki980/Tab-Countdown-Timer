@@ -551,14 +551,14 @@ async function showCountdown(tabId, timeRemaining, iconColor, badgeColor, title,
     }
     await ChromeAPIWrapper.action.setBadgeText({ tabId: tabId, text: '' });
   } else {
-    // Drawing failed: take down a label left by an earlier tick so the
-    // default icon shows with the badge text.
-    if (labeledIconTabs.has(tabId)) {
-      labeledIconTabs.delete(tabId);
-      await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
-      if (!isCurrent()) {
-        return false;
-      }
+    // Drawing failed: take down any label left by an earlier tick so the
+    // default icon shows with the badge text. Unconditional because the
+    // browser keeps a drawn icon across background restarts, which empty
+    // labeledIconTabs.
+    labeledIconTabs.delete(tabId);
+    await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+    if (!isCurrent()) {
+      return false;
     }
     await ChromeAPIWrapper.action.setBadgeText({
       tabId: tabId,

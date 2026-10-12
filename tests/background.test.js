@@ -865,6 +865,26 @@ describe('Background Script Utility Functions', () => {
         { tabId: 123, text: '1:59' }, expect.any(Function));
     });
 
+    test('a drawing failure restores the default icon even when no label is remembered', async() => {
+      global.OffscreenCanvas = jest.fn(() => ({
+        getContext: () => {
+          throw new Error('canvas lost');
+        }
+      }));
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+      // First failing tick forgets any remembered label, as a background
+      // restart would, while the browser may still show a drawn icon.
+      await runWithAlarm(120000);
+      chrome.action.setIcon.mockClear();
+
+      await runWithAlarm(119000);
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: DEFAULT_PATHS }, expect.any(Function));
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 123, text: '1:59' }, expect.any(Function));
+    });
+
     // Bitmap decoding that waits for release(), so a render stays pending
     // while the test delivers newer messages.
     const deferBitmaps = () => {
