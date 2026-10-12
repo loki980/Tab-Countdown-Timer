@@ -1,6 +1,6 @@
 {
     "name": "Tab Countdown Timer",
-    "version": "1.6.1",
+    "version": "1.7.0",
     "manifest_version": 3,
     "description": "A browser extension that allows you to set a timer that counts down and then closes the tab.",
     "icons": {
@@ -14,7 +14,7 @@
     },
     "background": {
         "service_worker": "background/background.js",
-        "scripts": ["background/background.js"]
+        "scripts": ["shared/video-site-utils.js", "background/background.js"]
     },
     "browser_specific_settings": {
         "gecko": {

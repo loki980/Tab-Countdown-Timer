@@ -41,7 +41,7 @@ Follow the prompts to add the extension.
 2. Click "Load Temporary Add-on…" and select `manifest.json` in the project root.
 3. The extension loads until the browser restarts (permanent installs require signing through [addons.mozilla.org](https://addons.mozilla.org)).
 
-Firefox 140 or newer is required. Chrome runs the background script as a service worker (`background.service_worker`), while Firefox runs it as an event page (`background.scripts`); both keys are declared in `manifest.json`.
+Firefox 140 or newer is required. Chrome runs the background script as a service worker (`background.service_worker`), while Firefox runs it as an event page (`background.scripts`). Both keys are declared in `manifest.json`, and the Firefox list loads `shared/video-site-utils.js` before `background/background.js` because event pages have no `importScripts`.
 
 ## Permissions
 
@@ -127,7 +127,7 @@ Tab-Countdown-Timer/
 
 ### Prerequisites
 - Node.js (for testing)
-- Chromium-based browser (Chrome, Edge, Brave)
+- Chromium-based browser (Chrome, Edge, Brave) or Firefox 140+
 - Basic JavaScript/HTML/CSS knowledge; familiarity with Chrome Extension APIs
 
 ### Setup
@@ -145,6 +145,8 @@ Tab-Countdown-Timer/
 ### Debugging
 - Inspect popup: Right-click icon > "Inspect popup".
 - Background console: `chrome://extensions/` > Details > "Inspect views: background page".
+- Firefox: `about:debugging#/runtime/this-firefox` > Tab Countdown Timer > "Inspect".
+- Firefox store check: `npx web-ext lint --source-dir dist/package` after `./release.sh` runs the same linter as addons.mozilla.org.
 
 ### Code Quality
 - Uses jQuery for popup DOM manipulation.
@@ -171,7 +173,11 @@ Current coverage: Core utilities (e.g., `FormatDuration`), alarm handling, YouTu
 
 ## Changelog
 
-### v1.5.0 (Recent)
+### v1.7.0 (Recent)
+- **Firefox support**: The same package installs in Firefox 140+ (desktop), with the background script running as an event page.
+- Bundled jQuery updated to 3.7.1.
+
+### v1.5.0
 - **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs.
   - Duration mode: Set a countdown from when the tab opens.
   - Time-of-day mode: Set a specific time for the timer to expire (e.g., 10:00 PM) — re-arms each time you next open the matching URL.

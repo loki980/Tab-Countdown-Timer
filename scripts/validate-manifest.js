@@ -93,6 +93,19 @@ function validateManifest() {
       }
     }
 
+    // Firefox ignores service_worker and runs these as an event page instead
+    if (manifest.background && Array.isArray(manifest.background.scripts)) {
+      for (const script of manifest.background.scripts) {
+        const scriptPath = path.join(__dirname, '..', script);
+        if (!fs.existsSync(scriptPath)) {
+          console.error(`❌ Background script not found: ${scriptPath}`);
+          hasErrors = true;
+        } else {
+          console.log(`✅ Found Firefox background script: ${script}`);
+        }
+      }
+    }
+
     // Validate permissions
     if (manifest.permissions) {
       const validPermissions = [

@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-This is a Chrome/Edge/Brave browser extension (Manifest V3) that allows users to set countdown timers on browser tabs. When timers expire, tabs close or (for YouTube) videos pause.
+This is a Chrome/Edge/Brave/Firefox browser extension (Manifest V3, one package for every store) that allows users to set countdown timers on browser tabs. When timers expire, tabs close or (for YouTube) videos pause.
 
 ## Key Files
 
 - `manifest.json` - Extension manifest with permissions and entry points
 - `background/background.js` - Service worker handling alarms, badge updates, and tab actions
-- `shared/video-site-utils.js` - URL/video-site helpers shared by the service worker and popup (loaded via `importScripts`, a `<script>` tag, and `require` in tests)
+- `shared/video-site-utils.js` - URL/video-site helpers shared by the service worker and popup (loaded via `importScripts` in Chrome, the manifest's `background.scripts` list in Firefox, a `<script>` tag, and `require` in tests)
 - `popup/popup.js` - Popup UI logic using jQuery
 - `popup/popup.html` - Popup HTML structure
 - `popup/styles.css` - CSS with dark/light theme support
@@ -34,6 +34,7 @@ This is a Chrome/Edge/Brave browser extension (Manifest V3) that allows users to
 - Use `ChromeAPIWrapper` in `background.js` for promisified Chrome API calls. It normalizes callbacks to Promises and silently ignores expected "tab not found" errors for badge updates.
 - Service workers (`background.js`) have no persistent state between wake-ups — use `chrome.storage.local` for persistence.
 - Always check if tabs/alarms exist before operating on them.
+- Firefox ignores `background.service_worker` and runs `background.scripts` as an event page, which has no `importScripts`. Any file `background.js` loads with `importScripts` must also be listed in `background.scripts`, before `background/background.js`, or Firefox's background script throws at startup and no timer fires. Check with `npx web-ext lint --source-dir dist/package` and by loading the add-on from `about:debugging`.
 
 ### Popup UI Constraints (NEVER SCROLL)
 
@@ -103,3 +104,4 @@ Timers persist by normalized URL rather than tab ID, so state survives tab closu
 2. `npm run build`.
 3. `./release.sh`.
 4. Load the output via `chrome://extensions` to verify before tagging.
+5. Run `npx web-ext lint --source-dir dist/package` (0 errors expected), load the zip in Firefox via `about:debugging`, then upload the same zip to addons.mozilla.org (Firefox desktop only, no source upload needed because nothing is minified or bundled except the official jQuery build).
