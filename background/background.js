@@ -510,26 +510,56 @@ async function renderCountdownIcon(text, color) {
 const labeledIconTabs = new Set();
 // Remaining milliseconds of timers paused from the popup, by tab id.
 const pausedTabs = new Map();
-// Bumped whenever the popup pauses or stops a timer. UpdateBadges abandons a
-// pass that started before the bump, so a stale alarm list cannot paint the
-// running icon over the paused or default one.
+
+// Timer state changes from the popup (start, pause, stop) are numbered. Each
+// tab remembers the number of its latest change, and every icon update
+// captures the counter when it starts. An update whose tab changed since then
+// is stale and stops before writing, so a slow render or an old alarm list
+// cannot paint over the icon a newer change asked for.
 let iconStateEpoch = 0;
+const tabStateVersions = new Map();
+
+function markTabStateChanged(tabId) {
+  iconStateEpoch++;
+  tabStateVersions.set(tabId, iconStateEpoch);
+}
+
+// Returns a check that stays true until the tab's timer state changes.
+function tabStateGuard(tabId, epoch = iconStateEpoch) {
+  return () => (tabStateVersions.get(tabId) || 0) <= epoch;
+}
+
+const ALWAYS_CURRENT = () => true;
 
 // Shows the remaining time for a tab: the labeled icon with empty badge
 // text, or badge text on the default icon when the icon cannot be drawn.
-// Returns false without touching the tab when isCurrent() turns false while
-// the icon renders.
-async function showCountdown(tabId, timeRemaining, iconColor, badgeColor, title, isCurrent) {
+// Returns false, leaving the rest untouched, once isCurrent() turns false.
+async function showCountdown(tabId, timeRemaining, iconColor, badgeColor, title, isCurrent = ALWAYS_CURRENT) {
   const imageData = await renderCountdownIcon(formatIconText(timeRemaining), iconColor);
-  if (isCurrent && !isCurrent()) {
+  if (!isCurrent()) {
     return false;
   }
   await ChromeAPIWrapper.action.setTitle({ tabId: tabId, title: title });
+  if (!isCurrent()) {
+    return false;
+  }
   if (imageData) {
     await ChromeAPIWrapper.action.setIcon({ tabId: tabId, imageData: imageData });
-    await ChromeAPIWrapper.action.setBadgeText({ tabId: tabId, text: '' });
     labeledIconTabs.add(tabId);
+    if (!isCurrent()) {
+      return false;
+    }
+    await ChromeAPIWrapper.action.setBadgeText({ tabId: tabId, text: '' });
   } else {
+    // Drawing failed: take down a label left by an earlier tick so the
+    // default icon shows with the badge text.
+    if (labeledIconTabs.has(tabId)) {
+      labeledIconTabs.delete(tabId);
+      await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+      if (!isCurrent()) {
+        return false;
+      }
+    }
     await ChromeAPIWrapper.action.setBadgeText({
       tabId: tabId,
       text: FormatDuration(timeRemaining)
@@ -540,22 +570,29 @@ async function showCountdown(tabId, timeRemaining, iconColor, badgeColor, title,
 }
 
 // Puts the tab back to the default hourglass, title and empty badge.
-async function restoreDefaultIcon(tabId) {
+async function restoreDefaultIcon(tabId, isCurrent = ALWAYS_CURRENT) {
   labeledIconTabs.delete(tabId);
   await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+  if (!isCurrent()) {
+    return;
+  }
   await ChromeAPIWrapper.action.setTitle({ tabId: tabId, title: DEFAULT_ICON_TITLE });
+  if (!isCurrent()) {
+    return;
+  }
   await ChromeAPIWrapper.action.setBadgeText({ tabId: tabId, text: '' });
   ChromeAPIWrapper.action.setBadgeBackgroundColor({ tabId: tabId, color: BADGE_COLOR_DEFAULT });
 }
 
 // Draws the paused icon with the frozen remaining time.
-async function showPausedIcon(tabId, timeRemaining) {
+async function showPausedIcon(tabId, timeRemaining, isCurrent = ALWAYS_CURRENT) {
   await showCountdown(
     tabId,
     timeRemaining,
     ICON_COLOR_PAUSED,
     BADGE_COLOR_DEFAULT,
-    'Paused, ' + FormatExactDuration(timeRemaining) + ' remaining'
+    'Paused, ' + FormatExactDuration(timeRemaining) + ' remaining',
+    isCurrent
   );
 }
 
@@ -650,6 +687,7 @@ async function HandleRemove(tabId, _removeInfo) {
     // Forget the tab's icon state (don't try to set the icon - tab is already gone)
     labeledIconTabs.delete(tabId);
     pausedTabs.delete(tabId);
+    tabStateVersions.delete(tabId);
 
     // Clean up tab-specific storage (don't try to set badge - tab is already gone)
     await ChromeAPIWrapper.storage.local.remove([tabKey + '_url', tabKey + '_action']);
@@ -666,24 +704,27 @@ ChromeAPIWrapper.tabs.onRemoved.addListener(HandleRemove);
 // label drawn into the toolbar icon, or badge text when it cannot be drawn.
 async function UpdateBadges() {
   const now = new Date();
+  // Taken before reading the alarms, so a change that lands while this pass
+  // is underway marks that tab's work in this pass as stale.
   const epoch = iconStateEpoch;
-  const isCurrent = () => iconStateEpoch === epoch;
 
   try {
     const alarms = await ChromeAPIWrapper.alarms.getAll();
-    if (!isCurrent()) {
-      return;
-    }
 
     // Restore the default icon on tabs whose timer went away while the icon
     // still showed a label. Paused tabs keep their paused icon.
     const alarmTabIds = new Set(alarms.map((alarm) => parseInt(alarm.name)));
     for (const tabId of Array.from(labeledIconTabs)) {
-      if (alarmTabIds.has(tabId) || pausedTabs.has(tabId)) {
+      const isCurrent = tabStateGuard(tabId, epoch);
+      if (alarmTabIds.has(tabId) || pausedTabs.has(tabId) || !isCurrent()) {
         continue;
       }
-      if (await ChromeAPIWrapper.tabs.exists(tabId)) {
-        await restoreDefaultIcon(tabId);
+      const exists = await ChromeAPIWrapper.tabs.exists(tabId);
+      if (pausedTabs.has(tabId) || !isCurrent()) {
+        continue;
+      }
+      if (exists) {
+        await restoreDefaultIcon(tabId, isCurrent);
       } else {
         labeledIconTabs.delete(tabId);
       }
@@ -697,7 +738,12 @@ async function UpdateBadges() {
 
     for (const alarm of alarms) {
       const tabId = parseInt(alarm.name);
+      const isCurrent = tabStateGuard(tabId, epoch);
       const tabExists = await ChromeAPIWrapper.tabs.exists(tabId);
+      if (!isCurrent()) {
+        // Paused, resumed or stopped since this pass read the alarms.
+        continue;
+      }
 
       if (tabExists) {
         // A live alarm means the timer is running, not paused.
@@ -728,9 +774,7 @@ async function UpdateBadges() {
         const title = FormatExactDuration(timeRemaining) + ' remaining\n'
           + (willPause ? 'Pauses video' : 'Closes tab') + ' at ' + endTime;
 
-        if (!await showCountdown(tabId, timeRemaining, iconColor, badgeColor, title, isCurrent)) {
-          return;
-        }
+        await showCountdown(tabId, timeRemaining, iconColor, badgeColor, title, isCurrent);
       } else {
         // If tab does not exist, clear the alarm
         await ChromeAPIWrapper.alarms.clear(alarm.name);
@@ -774,18 +818,19 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
     }
     if (message.type === 'timerStarted') {
       if (typeof message.tabId === 'number') {
+        markTabStateChanged(message.tabId);
         pausedTabs.delete(message.tabId);
       }
       startBadgePolling();
     } else if (message.type === 'timerPaused' && typeof message.tabId === 'number'
       && typeof message.timeRemaining === 'number') {
-      iconStateEpoch++;
+      markTabStateChanged(message.tabId);
       pausedTabs.set(message.tabId, message.timeRemaining);
-      showPausedIcon(message.tabId, message.timeRemaining);
+      showPausedIcon(message.tabId, message.timeRemaining, tabStateGuard(message.tabId));
     } else if (message.type === 'timerStopped' && typeof message.tabId === 'number') {
-      iconStateEpoch++;
+      markTabStateChanged(message.tabId);
       pausedTabs.delete(message.tabId);
-      restoreDefaultIcon(message.tabId);
+      restoreDefaultIcon(message.tabId, tabStateGuard(message.tabId));
     }
   });
 }

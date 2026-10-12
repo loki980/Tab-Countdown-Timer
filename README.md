@@ -78,10 +78,10 @@ The extension requests the following permissions in `manifest.json`:
 **Rule precedence**: Specific YouTube video rules take priority over "All YouTube videos" rules, which take priority over exact URL rules.
 
 ## Screenshots
-*(Add visual aids here if available: e.g., popup UI, badge examples. Currently, no images in repo – consider adding.)*
+*(Add visual aids here if available: e.g., popup UI, toolbar icon label examples. Currently, no images in repo – consider adding.)*
 
 - Popup interface: Clean form with inputs, presets, and action options.
-- Badge: Shows "0:45" in gray/red; disappears post-expiry.
+- Toolbar icon: Shows a label such as "29m" in slate, "45s" in red during the final minute, or gray when paused, and returns to the plain hourglass after expiry.
 
 ## Project Structure
 

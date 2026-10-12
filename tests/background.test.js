@@ -718,7 +718,8 @@ describe('Background Script Utility Functions', () => {
 
       await runWithAlarm(45000);
 
-      expect(chrome.action.setIcon).not.toHaveBeenCalled();
+      expect(chrome.action.setIcon).not.toHaveBeenCalledWith(
+        expect.objectContaining({ imageData: expect.anything() }), expect.any(Function));
       expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
         { tabId: 123, text: '0:45' }, expect.any(Function));
       expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
@@ -731,7 +732,8 @@ describe('Background Script Utility Functions', () => {
 
       await runWithAlarm(20000);
 
-      expect(chrome.action.setIcon).not.toHaveBeenCalled();
+      expect(chrome.action.setIcon).not.toHaveBeenCalledWith(
+        expect.objectContaining({ imageData: expect.anything() }), expect.any(Function));
       expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
         { tabId: 123, text: '0:20' }, expect.any(Function));
       expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
@@ -839,6 +841,106 @@ describe('Background Script Utility Functions', () => {
       // With no paused state left, the pass treats the label as stale
       expect(chrome.action.setIcon).toHaveBeenCalledWith(
         { tabId: 123, path: DEFAULT_PATHS }, expect.any(Function));
+    });
+
+    test('a drawing failure after a drawn tick restores the default icon', async() => {
+      await runWithAlarm(120000);
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        expect.objectContaining({ tabId: 123, imageData: expect.anything() }), expect.any(Function));
+      chrome.action.setIcon.mockClear();
+      // The next tick cannot draw: getContext throws
+      global.OffscreenCanvas = jest.fn(() => ({
+        getContext: () => {
+          throw new Error('canvas lost');
+        }
+      }));
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      await runWithAlarm(119000);
+
+      expect(chrome.action.setIcon).toHaveBeenCalledTimes(1);
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: DEFAULT_PATHS }, expect.any(Function));
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 123, text: '1:59' }, expect.any(Function));
+    });
+
+    // Bitmap decoding that waits for release(), so a render stays pending
+    // while the test delivers newer messages.
+    const deferBitmaps = () => {
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      global.createImageBitmap = jest.fn((blob) => gate.then(() => ({ bitmapOf: blob.url })));
+      return () => release();
+    };
+
+    test('a pause during the tab check keeps the paused state and icon', async() => {
+      const alarm = { name: '123', scheduledTime: Date.now() + 60000 };
+      chrome.alarms.getAll.mockImplementation((callback) => callback([alarm]));
+      let paused = false;
+      chrome.tabs.get.mockImplementation((tabId, callback) => {
+        // The popup pauses after the pass read the alarm list
+        if (!paused) {
+          paused = true;
+          sendMessage({ type: 'timerPaused', tabId: 123, timeRemaining: 60000 });
+        }
+        callback({ id: tabId, url: 'https://example.com' });
+      });
+
+      await UpdateBadges();
+      await flush();
+
+      // Paused state survived, so a later pass with no alarm keeps the icon
+      chrome.alarms.getAll.mockImplementation((callback) => callback([]));
+      chrome.action.setIcon.mockClear();
+      await UpdateBadges();
+
+      const titles = chrome.action.setTitle.mock.calls.map((call) => call[0].title);
+      expect(titles).toEqual(['Paused, 1:00 remaining']);
+      expect(chrome.action.setIcon).not.toHaveBeenCalled();
+      sendMessage({ type: 'timerStopped', tabId: 123 });
+      await flush();
+    });
+
+    test('a stop while the paused icon renders leaves the default icon', async() => {
+      const release = deferBitmaps();
+
+      sendMessage({ type: 'timerPaused', tabId: 91, timeRemaining: 60000 });
+      await flush();
+      sendMessage({ type: 'timerStopped', tabId: 91 });
+      await flush();
+      release();
+      await flush();
+
+      const icons = chrome.action.setIcon.mock.calls.map((call) => call[0]);
+      expect(icons).toEqual([{ tabId: 91, path: DEFAULT_PATHS }]);
+      const titles = chrome.action.setTitle.mock.calls.map((call) => call[0].title);
+      expect(titles).toEqual(['Tab Countdown Timer']);
+    });
+
+    test('a resume while the paused icon renders shows the running icon', async() => {
+      const release = deferBitmaps();
+      const alarm = { name: '92', scheduledTime: Date.now() + 120000 };
+
+      sendMessage({ type: 'timerPaused', tabId: 92, timeRemaining: 120000 });
+      await flush();
+      chrome.alarms.getAll.mockImplementation((callback) => callback([alarm]));
+      sendMessage({ type: 'timerStarted', tabId: 92 });
+      await flush();
+      release();
+      await flush();
+      await flush();
+
+      const titles = chrome.action.setTitle.mock.calls.map((call) => call[0].title);
+      expect(titles).toHaveLength(1);
+      expect(titles[0]).toMatch(/^2:00 remaining\nCloses tab at /);
+      // Only the running render reached setIcon, the stale paused one stopped
+      const drawn = chrome.action.setIcon.mock.calls.filter((call) => call[0].imageData);
+      expect(drawn).toHaveLength(1);
+      sendMessage({ type: 'timerStopped', tabId: 92 });
+      await flush();
     });
   });
 
