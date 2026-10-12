@@ -1,6 +1,10 @@
 // Import the utility functions and ChromeAPIWrapper for testing
 const {
   FormatDuration,
+  FormatExactDuration,
+  formatIconText,
+  renderCountdownIcon,
+  resetIconBitmapCache,
   ChromeAPIWrapper,
   HandleRemove,
   UpdateBadges,
@@ -484,6 +488,320 @@ describe('Background Script Utility Functions', () => {
 
       existsSpy.mockRestore();
       clearSpy.mockRestore();
+    });
+  });
+
+  /**
+   * Tests for the countdown label drawn into the toolbar icon. jsdom has no
+   * OffscreenCanvas or createImageBitmap, so both are mocked here along with
+   * fetch for the hourglass PNGs.
+   */
+  describe('Toolbar icon label', () => {
+    const { createChromeMocks } = require('./setup/chrome-mocks');
+    const DEFAULT_PATHS = {
+      16: '/icons/hourglass16.png',
+      32: '/icons/hourglass32.png',
+      48: '/icons/hourglass48.png',
+      128: '/icons/hourglass128.png'
+    };
+    let contexts;
+    let realFetch;
+
+    const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    const sendMessage = (message) => {
+      for (const listener of messageListeners) {
+        listener(message);
+      }
+    };
+
+    // Canvas context mock that records the fillStyle of each fill() call.
+    const makeContext = (size) => {
+      const ctx = {
+        size,
+        fills: [],
+        drawImage: jest.fn(),
+        beginPath: jest.fn(),
+        roundRect: jest.fn(),
+        fill: jest.fn(() => ctx.fills.push(ctx.fillStyle)),
+        fillText: jest.fn(),
+        measureText: jest.fn(() => ({ width: 0 })),
+        getImageData: jest.fn(() => ({ imageSize: size }))
+      };
+      return ctx;
+    };
+
+    beforeEach(() => {
+      jest.useRealTimers();
+      global.chrome = createChromeMocks();
+      contexts = [];
+      realFetch = global.fetch;
+      global.OffscreenCanvas = jest.fn((w) => ({
+        getContext: () => {
+          const ctx = makeContext(w);
+          contexts.push(ctx);
+          return ctx;
+        }
+      }));
+      global.createImageBitmap = jest.fn((blob) => Promise.resolve({ bitmapOf: blob.url }));
+      global.fetch = jest.fn((url) => Promise.resolve({
+        ok: true,
+        blob: () => Promise.resolve({ url })
+      }));
+      resetIconBitmapCache();
+    });
+
+    afterEach(() => {
+      delete global.OffscreenCanvas;
+      delete global.createImageBitmap;
+      global.fetch = realFetch;
+      resetIconBitmapCache();
+      stopBadgePolling();
+      jest.restoreAllMocks();
+    });
+
+    const runWithAlarm = async(msRemaining) => {
+      const alarm = { name: '123', scheduledTime: Date.now() + msRemaining };
+      chrome.alarms.getAll.mockImplementation((callback) => callback([alarm]));
+      await UpdateBadges();
+    };
+
+    test('formatIconText switches tiers at 60 s and 100 min', () => {
+      expect(formatIconText(59000)).toBe('59s');      // seconds below a minute
+      expect(formatIconText(60000)).toBe('1m');       // whole minutes from 60 s
+      expect(formatIconText(99 * 60000)).toBe('99m'); // last minute tier
+      expect(formatIconText(100 * 60000)).toBe('2h'); // hours from 100 min
+      expect(formatIconText(86400000)).toBe('24h');   // longest possible timer
+      expect(formatIconText(-1)).toBe('?');
+    });
+
+    test('formatIconText never exceeds three characters up to 24 hours', () => {
+      for (let s = 0; s <= 86400; s++) {
+        expect(formatIconText(s * 1000).length).toBeLessThanOrEqual(3);
+      }
+    });
+
+    test('FormatExactDuration shows M:SS below an hour and H:MM:SS above', () => {
+      expect(FormatExactDuration(90000)).toBe('1:30');
+      expect(FormatExactDuration(3723000)).toBe('1:02:03');
+      expect(FormatExactDuration(-1)).toBe('?');
+    });
+
+    test('renders the hourglass and label at both 16 and 32 px', async() => {
+      const imageData = await renderCountdownIcon('29m', '#3d4a58');
+
+      expect(imageData).toEqual({ 16: { imageSize: 16 }, 32: { imageSize: 32 } });
+      expect(global.fetch).toHaveBeenCalledWith('chrome-extension://test-id/icons/hourglass16.png');
+      expect(global.fetch).toHaveBeenCalledWith('chrome-extension://test-id/icons/hourglass32.png');
+      const [ctx16, ctx32] = contexts;
+      expect(ctx16.drawImage).toHaveBeenCalledWith(
+        { bitmapOf: 'chrome-extension://test-id/icons/hourglass16.png' }, 0, 0, 16, 16);
+      expect(ctx32.drawImage).toHaveBeenCalledWith(
+        { bitmapOf: 'chrome-extension://test-id/icons/hourglass32.png' }, 0, 0, 32, 32);
+      // White pill (h = round(0.5 * 32) = 16) then the inset fill (b = 2)
+      expect(ctx32.roundRect).toHaveBeenNthCalledWith(1, 0, 16, 32, 16, 16 * 0.4);
+      expect(ctx32.roundRect).toHaveBeenNthCalledWith(2, 2, 18, 28, 12, 12 * 0.4);
+      expect(ctx32.fills).toEqual(['#ffffff', '#3d4a58']);
+      expect(ctx32.fillText).toHaveBeenCalledWith('29m', 16, 32 - 16 / 2 + 32 * 0.03);
+      // ceil(0.95 * 12) when the reference text already fits
+      expect(ctx32.font).toBe('bold 12px sans-serif');
+    });
+
+    test('fits the font to 88m within 0.86 of the icon width, once per size', async() => {
+      // At 32 px the text is 2.6 px wide per px of font, so 10px is the
+      // largest size within 0.86 * 32 = 27.52
+      global.OffscreenCanvas = jest.fn((w) => ({
+        getContext: () => {
+          const ctx = makeContext(w);
+          ctx.measureText = jest.fn(() => ({
+            width: parseInt(ctx.font.split(' ')[1]) * (w === 32 ? 2.6 : 1)
+          }));
+          contexts.push(ctx);
+          return ctx;
+        }
+      }));
+
+      await renderCountdownIcon('5m', '#3d4a58');
+      await renderCountdownIcon('24h', '#3d4a58');
+
+      expect(contexts[1].measureText).toHaveBeenCalledWith('88m');
+      expect(contexts[1].font).toBe('bold 10px sans-serif');
+      // The second render reuses the fitted size for a different label
+      expect(contexts[3].measureText).not.toHaveBeenCalled();
+      expect(contexts[3].font).toBe('bold 10px sans-serif');
+    });
+
+    test('loads the hourglass bitmaps once per background lifetime', async() => {
+      await renderCountdownIcon('5', '#3d4a58');
+      await renderCountdownIcon('4', '#3d4a58');
+
+      expect(global.fetch).toHaveBeenCalledTimes(2); // one per size, not per render
+    });
+
+    test('running timer sets both icon sizes, empty badge and tooltip', async() => {
+      await runWithAlarm(29 * 60000 + 30000);
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, imageData: { 16: { imageSize: 16 }, 32: { imageSize: 32 } } },
+        expect.any(Function)
+      );
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 123, text: '' }, expect.any(Function));
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: expect.stringMatching(/^29:30 remaining\nCloses tab at /) },
+        expect.any(Function)
+      );
+      expect(contexts[0].fillText).toHaveBeenCalledWith('29m', expect.any(Number), expect.any(Number));
+      expect(contexts[1].fills).toEqual(['#ffffff', '#3d4a58']);
+    });
+
+    test('tooltip says the video pauses for a video tab set to pause', async() => {
+      chrome.tabs.get.mockImplementation((tabId, callback) =>
+        callback({ id: tabId, url: 'https://www.youtube.com/watch?v=abc' }));
+      chrome.storage.local.get.mockImplementation((keys, callback) =>
+        callback({ '123_action': 'pause' }));
+
+      await runWithAlarm(90000);
+
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: expect.stringMatching(/^1:30 remaining\nPauses video at /) },
+        expect.any(Function)
+      );
+    });
+
+    test('final minute draws the label in red', async() => {
+      await runWithAlarm(45000);
+
+      expect(contexts[1].fillText).toHaveBeenCalledWith('45s', expect.any(Number), expect.any(Number));
+      expect(contexts[1].fills).toEqual(['#ffffff', '#d92d20']);
+    });
+
+    test('falls back to badge text when OffscreenCanvas is undefined', async() => {
+      delete global.OffscreenCanvas;
+
+      await runWithAlarm(45000);
+
+      expect(chrome.action.setIcon).not.toHaveBeenCalled();
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 123, text: '0:45' }, expect.any(Function));
+      expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
+        { tabId: 123, color: '#666666' }, expect.any(Function));
+    });
+
+    test('falls back to badge text when the bitmap fetch rejects', async() => {
+      global.fetch = jest.fn(() => Promise.reject(new Error('network down')));
+      jest.spyOn(console, 'error').mockImplementation(() => {});
+
+      await runWithAlarm(20000);
+
+      expect(chrome.action.setIcon).not.toHaveBeenCalled();
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 123, text: '0:20' }, expect.any(Function));
+      expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
+        { tabId: 123, color: '#ff0000' }, expect.any(Function));
+    });
+
+    test('timerPaused message draws the gray paused icon and tooltip', async() => {
+      sendMessage({ type: 'timerPaused', tabId: 77, timeRemaining: 90000 });
+      await flush();
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 77, imageData: { 16: { imageSize: 16 }, 32: { imageSize: 32 } } },
+        expect.any(Function)
+      );
+      expect(contexts[1].fillText).toHaveBeenCalledWith('1m', expect.any(Number), expect.any(Number));
+      expect(contexts[1].fills).toEqual(['#ffffff', '#6b7280']);
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 77, title: 'Paused, 1:30 remaining' }, expect.any(Function));
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 77, text: '' }, expect.any(Function));
+      sendMessage({ type: 'timerStopped', tabId: 77 });
+      await flush();
+    });
+
+    test('a paused tab keeps its icon while other timers tick', async() => {
+      sendMessage({ type: 'timerPaused', tabId: 78, timeRemaining: 90000 });
+      await flush();
+      chrome.action.setIcon.mockClear();
+
+      await runWithAlarm(60000);
+
+      expect(chrome.action.setIcon).not.toHaveBeenCalledWith(
+        { tabId: 78, path: DEFAULT_PATHS }, expect.any(Function));
+      sendMessage({ type: 'timerStopped', tabId: 78 });
+      sendMessage({ type: 'timerStopped', tabId: 123 });
+      await flush();
+    });
+
+    test('timerStopped message restores the default icon and title', async() => {
+      sendMessage({ type: 'timerStopped', tabId: 55 });
+      await flush();
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 55, path: DEFAULT_PATHS }, expect.any(Function));
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 55, title: 'Tab Countdown Timer' }, expect.any(Function));
+      expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
+        { tabId: 55, text: '' }, expect.any(Function));
+    });
+
+    test('alarm that pauses a video restores the default icon and title', async() => {
+      chrome.tabs.get.mockImplementation((tabId, callback) =>
+        callback({ id: tabId, url: 'https://www.youtube.com/watch?v=abc' }));
+      chrome.storage.local.get.mockImplementation((keys, callback) =>
+        callback({ '123_action': 'pause' }));
+
+      await alarmListeners[0]({ name: '123' });
+
+      expect(chrome.scripting.executeScript).toHaveBeenCalled();
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: DEFAULT_PATHS }, expect.any(Function));
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: 'Tab Countdown Timer' }, expect.any(Function));
+    });
+
+    test('UpdateBadges restores the default icon once the alarm is gone', async() => {
+      await runWithAlarm(60000);
+      chrome.action.setIcon.mockClear();
+      chrome.alarms.getAll.mockImplementation((callback) => callback([]));
+
+      await UpdateBadges();
+
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: DEFAULT_PATHS }, expect.any(Function));
+      expect(chrome.action.setTitle).toHaveBeenCalledWith(
+        { tabId: 123, title: 'Tab Countdown Timer' }, expect.any(Function));
+    });
+
+    test('UpdateBadges abandons a pass when a pause lands mid-render', async() => {
+      const alarm = { name: '123', scheduledTime: Date.now() + 60000 };
+      chrome.alarms.getAll.mockImplementation((callback) => {
+        // The popup pauses the timer while this pass is underway
+        sendMessage({ type: 'timerPaused', tabId: 123, timeRemaining: 60000 });
+        callback([alarm]);
+      });
+
+      await UpdateBadges();
+      await flush();
+
+      const titles = chrome.action.setTitle.mock.calls.map((call) => call[0].title);
+      expect(titles).toEqual(['Paused, 1:00 remaining']);
+      sendMessage({ type: 'timerStopped', tabId: 123 });
+      await flush();
+    });
+
+    test('timerStarted message clears the paused state for that tab', async() => {
+      sendMessage({ type: 'timerPaused', tabId: 123, timeRemaining: 60000 });
+      await flush();
+      chrome.alarms.getAll.mockImplementation((callback) => callback([]));
+      chrome.action.setIcon.mockClear();
+
+      sendMessage({ type: 'timerStarted', tabId: 123 });
+      await flush();
+
+      // With no paused state left, the pass treats the label as stale
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: DEFAULT_PATHS }, expect.any(Function));
     });
   });
 

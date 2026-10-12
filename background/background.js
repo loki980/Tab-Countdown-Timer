@@ -162,6 +162,37 @@ const ChromeAPIWrapper = {
           resolve();
         }
       });
+    },
+    // Sets the extension's toolbar icon for a tab. Errors (e.g., tab closed)
+    // are ignored, matching the badge color setter above.
+    setIcon: (options) => {
+      return new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.action && chrome.action.setIcon) {
+          chrome.action.setIcon(options, () => {
+            if (chrome.runtime.lastError) {
+              // Silently ignore - tab may have been closed
+            }
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
+    },
+    // Sets the toolbar icon tooltip for a tab, ignoring errors like above.
+    setTitle: (options) => {
+      return new Promise((resolve) => {
+        if (typeof chrome !== 'undefined' && chrome.action && chrome.action.setTitle) {
+          chrome.action.setTitle(options, () => {
+            if (chrome.runtime.lastError) {
+              // Silently ignore - tab may have been closed
+            }
+            resolve();
+          });
+        } else {
+          resolve();
+        }
+      });
     }
   },
   storage: {
@@ -284,6 +315,211 @@ function FormatDuration(d) {
   return hours + 'h';
 }
 
+// Un-abbreviated countdown for the icon tooltip: M:SS below an hour,
+// H:MM:SS from an hour up. Same Math.ceil convention as FormatDuration.
+function FormatExactDuration(d) {
+  if (d < 0) {
+    return '?';
+  }
+  const totalSeconds = Math.ceil(d / 1000);
+  function pad(x) {
+    return x < 10 ? '0' + x : x;
+  }
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return hours + ':' + pad(minutes) + ':' + pad(seconds);
+  }
+  return minutes + ':' + pad(seconds);
+}
+
+// Reduces the remaining time to at most three characters with a unit
+// suffix (45s, 5m, 99m, 2h) so the label on the toolbar icon stays legible.
+// The tooltip keeps the exact countdown.
+function formatIconText(d) {
+  if (d < 0) {
+    return '?';
+  }
+  const totalSeconds = Math.ceil(d / 1000);
+  if (totalSeconds < 60) {
+    return totalSeconds + 's';
+  }
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  if (totalMinutes <= 99) {
+    return totalMinutes + 'm';
+  }
+  return Math.round(totalMinutes / 60) + 'h';
+}
+
+const ICON_SIZES = [16, 32];
+const DEFAULT_ICON_TITLE = 'Tab Countdown Timer';
+const DEFAULT_ICON_PATHS = {
+  16: '/icons/hourglass16.png',
+  32: '/icons/hourglass32.png',
+  48: '/icons/hourglass48.png',
+  128: '/icons/hourglass128.png'
+};
+const ICON_COLOR_RUNNING = '#3d4a58';
+const ICON_COLOR_FINAL_MINUTE = '#d92d20';
+const ICON_COLOR_PAUSED = '#6b7280';
+const BADGE_COLOR_DEFAULT = '#666666';
+const BADGE_COLOR_WARNING = '#ff0000';
+
+// Hourglass bitmaps for each rendered size, loaded once per background
+// lifetime. A rejected load stays cached so every later tick goes straight
+// to the badge fallback instead of refetching.
+let iconBitmapsPromise = null;
+
+function loadIconBitmaps() {
+  if (iconBitmapsPromise === null) {
+    iconBitmapsPromise = Promise.all(ICON_SIZES.map(async(size) => {
+      const response = await fetch(chrome.runtime.getURL('icons/hourglass' + size + '.png'));
+      if (!response.ok) {
+        throw new Error('Failed to load hourglass' + size + '.png');
+      }
+      return createImageBitmap(await response.blob());
+    })).then((bitmaps) => {
+      const bySize = {};
+      ICON_SIZES.forEach((size, i) => {
+        bySize[size] = bitmaps[i];
+      });
+      return bySize;
+    });
+  }
+  return iconBitmapsPromise;
+}
+
+// Test hook: forget the cached bitmaps and font sizes so a test can load
+// and fit them again.
+function resetIconBitmapCache() {
+  iconBitmapsPromise = null;
+  iconFontSizes.clear();
+}
+
+// Label font size per icon size, fitted once to the widest label ('88m')
+// so the text does not change size as it ticks.
+const ICON_FONT_REFERENCE_TEXT = '88m';
+const iconFontSizes = new Map();
+
+function iconFontSize(ctx, S, innerHeight) {
+  if (!iconFontSizes.has(S)) {
+    let fontSize = Math.ceil(0.95 * innerHeight);
+    ctx.font = 'bold ' + fontSize + 'px sans-serif';
+    while (fontSize > 5 && ctx.measureText(ICON_FONT_REFERENCE_TEXT).width > 0.86 * S) {
+      fontSize--;
+      ctx.font = 'bold ' + fontSize + 'px sans-serif';
+    }
+    iconFontSizes.set(S, fontSize);
+  }
+  return iconFontSizes.get(S);
+}
+
+// Draws the hourglass at size S with the label in an outlined pill over its
+// lower half. The browser badge is too narrow for the countdown (Firefox
+// clips it after 2 to 3 characters), so the time is drawn into the icon.
+function drawIconLabel(ctx, S, bitmap, text, color) {
+  ctx.drawImage(bitmap, 0, 0, S, S);
+
+  const h = Math.round(0.5 * S);
+  const b = Math.max(1, Math.round(S / 16));
+  ctx.beginPath();
+  ctx.roundRect(0, S - h, S, h, 0.4 * h);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  ctx.beginPath();
+  ctx.roundRect(b, S - h + b, S - 2 * b, h - 2 * b, 0.4 * (h - 2 * b));
+  ctx.fillStyle = color;
+  ctx.fill();
+
+  ctx.font = 'bold ' + iconFontSize(ctx, S, h - 2 * b) + 'px sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, S / 2, S - h / 2 + 0.03 * S);
+}
+
+// Renders the labeled icon at every size in ICON_SIZES. Resolves to the
+// imageData map for action.setIcon, or null when OffscreenCanvas or
+// createImageBitmap is missing or anything fails, so callers can fall back
+// to badge text.
+async function renderCountdownIcon(text, color) {
+  if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
+    return null;
+  }
+  try {
+    const bitmaps = await loadIconBitmaps();
+    const imageData = {};
+    for (const S of ICON_SIZES) {
+      const canvas = new OffscreenCanvas(S, S);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return null;
+      }
+      drawIconLabel(ctx, S, bitmaps[S], text, color);
+      imageData[S] = ctx.getImageData(0, 0, S, S);
+    }
+    return imageData;
+  } catch (error) {
+    console.error('Failed to render countdown icon:', error && error.message ? error.message : error);
+    return null;
+  }
+}
+
+// Tabs whose toolbar icon currently shows a label, so the default hourglass
+// can be restored when their timer goes away.
+const labeledIconTabs = new Set();
+// Remaining milliseconds of timers paused from the popup, by tab id.
+const pausedTabs = new Map();
+// Bumped whenever the popup pauses or stops a timer. UpdateBadges abandons a
+// pass that started before the bump, so a stale alarm list cannot paint the
+// running icon over the paused or default one.
+let iconStateEpoch = 0;
+
+// Shows the remaining time for a tab: the labeled icon with empty badge
+// text, or badge text on the default icon when the icon cannot be drawn.
+// Returns false without touching the tab when isCurrent() turns false while
+// the icon renders.
+async function showCountdown(tabId, timeRemaining, iconColor, badgeColor, title, isCurrent) {
+  const imageData = await renderCountdownIcon(formatIconText(timeRemaining), iconColor);
+  if (isCurrent && !isCurrent()) {
+    return false;
+  }
+  await ChromeAPIWrapper.action.setTitle({ tabId: tabId, title: title });
+  if (imageData) {
+    await ChromeAPIWrapper.action.setIcon({ tabId: tabId, imageData: imageData });
+    await ChromeAPIWrapper.action.setBadgeText({ tabId: tabId, text: '' });
+    labeledIconTabs.add(tabId);
+  } else {
+    await ChromeAPIWrapper.action.setBadgeText({
+      tabId: tabId,
+      text: FormatDuration(timeRemaining)
+    });
+    ChromeAPIWrapper.action.setBadgeBackgroundColor({ tabId: tabId, color: badgeColor });
+  }
+  return true;
+}
+
+// Puts the tab back to the default hourglass, title and empty badge.
+async function restoreDefaultIcon(tabId) {
+  labeledIconTabs.delete(tabId);
+  await ChromeAPIWrapper.action.setIcon({ tabId: tabId, path: DEFAULT_ICON_PATHS });
+  await ChromeAPIWrapper.action.setTitle({ tabId: tabId, title: DEFAULT_ICON_TITLE });
+  await ChromeAPIWrapper.action.setBadgeText({ tabId: tabId, text: '' });
+  ChromeAPIWrapper.action.setBadgeBackgroundColor({ tabId: tabId, color: BADGE_COLOR_DEFAULT });
+}
+
+// Draws the paused icon with the frozen remaining time.
+async function showPausedIcon(tabId, timeRemaining) {
+  await showCountdown(
+    tabId,
+    timeRemaining,
+    ICON_COLOR_PAUSED,
+    BADGE_COLOR_DEFAULT,
+    'Paused, ' + FormatExactDuration(timeRemaining) + ' remaining'
+  );
+}
+
 // Pauses the first HTML5 <video> element on the page. Used for YouTube and
 // Twitch when the user picked "Pause video" instead of "Close tab".
 async function pauseVideoOnPage(tabId) {
@@ -297,12 +533,8 @@ async function pauseVideoOnPage(tabId) {
         }
       }
     });
-    // Clear the badge text and reset color after pausing
-    await ChromeAPIWrapper.action.setBadgeText({ 'tabId': tabId, 'text': '' });
-    ChromeAPIWrapper.action.setBadgeBackgroundColor({
-      'tabId': tabId,
-      'color': '#666666'
-    });
+    // Restore the default icon, title and badge after pausing
+    await restoreDefaultIcon(tabId);
   } catch (error) {
     console.error('Failed to pause video on page:', error && error.message ? error.message : error);
   }
@@ -332,7 +564,9 @@ ChromeAPIWrapper.alarms.onAlarm.addListener(async function(alarm) {
     } else {
       // Close the tab for everything else, or when close was explicitly chosen.
       await ChromeAPIWrapper.tabs.remove(tabId);
+      labeledIconTabs.delete(tabId);
     }
+    pausedTabs.delete(tabId);
 
     // Reset badge color after alarm expires
     ChromeAPIWrapper.action.setBadgeBackgroundColor({
@@ -374,6 +608,10 @@ async function HandleRemove(tabId, _removeInfo) {
     // Clear the alarm
     await ChromeAPIWrapper.alarms.clear(tabKey);
 
+    // Forget the tab's icon state (don't try to set the icon - tab is already gone)
+    labeledIconTabs.delete(tabId);
+    pausedTabs.delete(tabId);
+
     // Clean up tab-specific storage (don't try to set badge - tab is already gone)
     await ChromeAPIWrapper.storage.local.remove([tabKey + '_url', tabKey + '_action']);
 
@@ -385,12 +623,32 @@ async function HandleRemove(tabId, _removeInfo) {
 }
 ChromeAPIWrapper.tabs.onRemoved.addListener(HandleRemove);
 
-// Set the extension badge to the time remaining every second.
+// Show the time remaining on every tab with a timer, once per second: a
+// label drawn into the toolbar icon, or badge text when it cannot be drawn.
 async function UpdateBadges() {
   const now = new Date();
+  const epoch = iconStateEpoch;
+  const isCurrent = () => iconStateEpoch === epoch;
 
   try {
     const alarms = await ChromeAPIWrapper.alarms.getAll();
+    if (!isCurrent()) {
+      return;
+    }
+
+    // Restore the default icon on tabs whose timer went away while the icon
+    // still showed a label. Paused tabs keep their paused icon.
+    const alarmTabIds = new Set(alarms.map((alarm) => parseInt(alarm.name)));
+    for (const tabId of Array.from(labeledIconTabs)) {
+      if (alarmTabIds.has(tabId) || pausedTabs.has(tabId)) {
+        continue;
+      }
+      if (await ChromeAPIWrapper.tabs.exists(tabId)) {
+        await restoreDefaultIcon(tabId);
+      } else {
+        labeledIconTabs.delete(tabId);
+      }
+    }
 
     // Nothing to count down — stop polling so the service worker can suspend.
     if (alarms.length === 0) {
@@ -403,23 +661,37 @@ async function UpdateBadges() {
       const tabExists = await ChromeAPIWrapper.tabs.exists(tabId);
 
       if (tabExists) {
+        // A live alarm means the timer is running, not paused.
+        pausedTabs.delete(tabId);
         const timeRemaining = alarm.scheduledTime - now;
-        const description = FormatDuration(timeRemaining);
-
-        // Update badge text
-        await ChromeAPIWrapper.action.setBadgeText({
-          'tabId': tabId,
-          'text': description
-        });
 
         // Match the popup's warning threshold by ceiling sub-second
         // remainders the same way it does.
         const secondsRemaining = Math.ceil(timeRemaining / 1000);
-        const badgeColor = secondsRemaining <= 30 ? '#ff0000' : '#666666';
-        ChromeAPIWrapper.action.setBadgeBackgroundColor({
-          'tabId': tabId,
-          'color': badgeColor
-        });
+        const badgeColor = secondsRemaining <= 30 ? BADGE_COLOR_WARNING : BADGE_COLOR_DEFAULT;
+        // The label goes red for the whole final minute, matching the
+        // switch to a ticking seconds display.
+        const iconColor = secondsRemaining < 60 ? ICON_COLOR_FINAL_MINUTE : ICON_COLOR_RUNNING;
+
+        // Tooltip shows the exact countdown and the scheduled outcome, since
+        // the icon only fits an abbreviated time.
+        let tab = null;
+        try {
+          tab = await ChromeAPIWrapper.tabs.get(tabId);
+        } catch {
+          tab = null;
+        }
+        const data = await ChromeAPIWrapper.storage.local.get(tabId + '_action');
+        const action = data[tabId + '_action'] || 'close';
+        const willPause = !!(tab && tab.url && getVideoSiteContext(tab.url)) && action === 'pause';
+        const endTime = new Date(alarm.scheduledTime)
+          .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+        const title = FormatExactDuration(timeRemaining) + ' remaining\n'
+          + (willPause ? 'Pauses video' : 'Closes tab') + ' at ' + endTime;
+
+        if (!await showCountdown(tabId, timeRemaining, iconColor, badgeColor, title, isCurrent)) {
+          return;
+        }
       } else {
         // If tab does not exist, clear the alarm
         await ChromeAPIWrapper.alarms.clear(alarm.name);
@@ -458,8 +730,23 @@ startBadgePolling();
 
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((message) => {
-    if (message && message.type === 'timerStarted') {
+    if (!message) {
+      return;
+    }
+    if (message.type === 'timerStarted') {
+      if (typeof message.tabId === 'number') {
+        pausedTabs.delete(message.tabId);
+      }
       startBadgePolling();
+    } else if (message.type === 'timerPaused' && typeof message.tabId === 'number'
+      && typeof message.timeRemaining === 'number') {
+      iconStateEpoch++;
+      pausedTabs.set(message.tabId, message.timeRemaining);
+      showPausedIcon(message.tabId, message.timeRemaining);
+    } else if (message.type === 'timerStopped' && typeof message.tabId === 'number') {
+      iconStateEpoch++;
+      pausedTabs.delete(message.tabId);
+      restoreDefaultIcon(message.tabId);
     }
   });
 }
@@ -578,6 +865,10 @@ if (typeof chrome !== 'undefined' && chrome.tabs) {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     FormatDuration,
+    FormatExactDuration,
+    formatIconText,
+    renderCountdownIcon,
+    resetIconBitmapCache,
     ChromeAPIWrapper,
     HandleRemove,
     UpdateBadges,

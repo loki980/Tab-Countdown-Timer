@@ -9,7 +9,7 @@ A productivity-focused browser extension (Chrome, Edge, Brave, Firefox) that hel
 
 - **Custom Timers**: Set timers for any tab using hours (0-24) and minutes (0-59) via intuitive inputs.
 - **YouTube-Specific Actions**: For YouTube watch pages, choose to pause the video instead of closing the tab (default for YouTube).
-- **Real-Time Feedback**: Extension badge shows remaining time (e.g., "1:23"), updates every second, turns red under 30 seconds, and grays when paused.
+- **Real-Time Feedback**: The toolbar hourglass shows the remaining time as a label with its unit (e.g., "29m", "2h", or ticking seconds like "45s" in red during the final minute), updates every second, and grays when paused. Hovering the icon shows the exact time left and when the tab closes or the video pauses.
 - **Controls**: Pause/resume, cancel timers; supports multiple tabs simultaneously.
 - **Persistent Timers**: Running or paused timers are saved when tabs close and automatically restore when reopening the same URL (7-day expiration).
 - **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs. For YouTube, choose "This exact video" or "All YouTube videos". Supports duration mode (countdown from open) or time-of-day mode (expires at a specific time when you next open the URL).
@@ -176,6 +176,7 @@ Current coverage: Core utilities (e.g., `FormatDuration`), alarm handling, YouTu
 ### v1.7.0 (Recent)
 - **Firefox support**: The same package installs in Firefox 140+ (desktop), with the background script running as an event page.
 - Bundled jQuery updated to 3.7.1.
+- **Icon countdown label**: The remaining time is drawn over the toolbar icon instead of in the badge, which Firefox clips after 2 to 3 characters.
 
 ### v1.5.0
 - **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs.

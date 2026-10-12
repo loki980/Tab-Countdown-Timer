@@ -46,12 +46,12 @@ const initPopup = function() {
     twitch: { exact: 'This channel/video', all: 'All Twitch streams' }
   };
 
-  // Wake the service worker so badge polling resumes for a newly created
-  // alarm. Without this the badge stays blank until the next worker wake-up.
-  function notifyTimerStarted() {
+  // Tells the background about a timer change so it can redraw the toolbar
+  // icon for the tab. Sending also wakes the service worker.
+  function notifyBackground(message) {
     try {
       if (chrome.runtime && typeof chrome.runtime.sendMessage === 'function') {
-        const result = chrome.runtime.sendMessage({ type: 'timerStarted' });
+        const result = chrome.runtime.sendMessage(message);
         if (result && typeof result.catch === 'function') {
           result.catch(() => {});
         }
@@ -59,6 +59,17 @@ const initPopup = function() {
     } catch {
       // No background listener (e.g. tests) — polling restarts on next wake.
     }
+  }
+
+  // Wake the service worker so badge polling resumes for a newly created
+  // alarm. Without this the icon stays unlabeled until the next worker wake-up.
+  function notifyTimerStarted(tabId) {
+    notifyBackground({ type: 'timerStarted', tabId: tabId });
+  }
+
+  // Has the background draw the paused icon with the frozen remaining time.
+  function notifyTimerPaused(tabId, timeRemaining) {
+    notifyBackground({ type: 'timerPaused', tabId: tabId, timeRemaining: timeRemaining });
   }
 
   function getAutoStartRuleKey(url, matchType = 'exact') {
@@ -304,10 +315,7 @@ const initPopup = function() {
 
         if (isPaused) {
           await chrome.alarms.clear(tabKey);
-          await chrome.action.setBadgeBackgroundColor({
-            tabId: tabId,
-            color: '#666666'
-          });
+          notifyTimerPaused(tabId, pausedTimeRemaining);
           // Save pause state by normalized URL
           await chrome.storage.local.set({
             [urlKey]: {
@@ -321,7 +329,7 @@ const initPopup = function() {
           });
           // Clear the URL-based pause state on resume
           await chrome.storage.local.remove(urlKey);
-          notifyTimerStarted();
+          notifyTimerStarted(tabId);
         }
       } catch (error) {
         console.error('Error handling pause:', error);
@@ -356,6 +364,7 @@ const initPopup = function() {
           $('#cancelDiv').show();
           $start.text('Update timer');
           setupCountdown(tabIdStr, null, pauseState);
+          notifyTimerPaused(currentTab.id, pauseState.pausedTimeRemaining);
         } else {
           // Expired - clean it up
           await chrome.storage.local.remove(urlKey);
@@ -614,7 +623,7 @@ const initPopup = function() {
       const delayMs = getCloseTimeInSeconds() * 1000;
       const scheduledTime = Date.now() + delayMs;
       await chrome.alarms.create(tabIdStr, { when: scheduledTime });
-      notifyTimerStarted();
+      notifyTimerStarted(tabId);
 
       // Show the cancel div and mark as update-able
       $('#cancelDiv').show();
@@ -638,6 +647,8 @@ const initPopup = function() {
       await chrome.action.setBadgeText({ tabId: tabId, text: '' });
       await chrome.action.setBadgeBackgroundColor({ tabId: tabId, color: '#666666' });
       await chrome.alarms.clear(tabKey);
+      // Restore the default toolbar icon and title for this tab
+      notifyBackground({ type: 'timerStopped', tabId: tabId });
       // Clear URL-based pause state AND URL tracking
       await chrome.storage.local.remove([urlKey, tabKey + '_url', tabKey + '_action']);
 
