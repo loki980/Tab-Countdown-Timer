@@ -555,7 +555,7 @@ describe('Background Script Utility Functions', () => {
         fill: jest.fn(() => ctx.fills.push(ctx.fillStyle)),
         stroke: jest.fn(() => ctx.strokes.push({ style: ctx.strokeStyle, width: ctx.lineWidth })),
         fillText: jest.fn((text, x, y) => ctx.texts.push({
-          text, x, y, color: ctx.fillStyle, font: ctx.font
+          text, x, y, color: ctx.fillStyle, font: ctx.font, align: ctx.textAlign
         })),
         measureText: jest.fn((text) => ({
           width: fontPx(ctx.font) * 0.6 * text.length,
@@ -637,74 +637,159 @@ describe('Background Script Utility Functions', () => {
       await renderCountdownIcon('28m', ICON_STATES.running);
 
       const ctx = lastContext(32);
-      expect(ctx.roundRect).toHaveBeenNthCalledWith(1, 0, 0, 32, 32, 0.24 * 32);
+      expect(ctx.roundRect).toHaveBeenNthCalledWith(1, 0, 0, 32, 32, 0.2 * 32);
       expect(ctx.createLinearGradient).toHaveBeenCalledWith(0, 0, 0, 32);
       expect(ctx.fills).toEqual([ctx.gradients[0]]);
-      expect(ctx.roundRect).toHaveBeenNthCalledWith(2, 0.5, 0.5, 31, 31, 0.24 * 32);
+      expect(ctx.roundRect).toHaveBeenNthCalledWith(2, 0.5, 0.5, 31, 31, 0.2 * 32);
       expect(ctx.strokes).toEqual([{ style: 'rgba(255,255,255,0.18)', width: 1 }]);
     });
 
-    test('places white digits and a smaller unit as a centered pair', async() => {
+    test('stacks white digits over the unit word, both centered', async() => {
       await renderCountdownIcon('28m', ICON_STATES.running);
 
-      // At 32 px the fit settles on 18px digits and a 13px unit:
-      // 21.6 + 0.64 + 7.8 = 30.04 <= 0.94 * 32, while 19px gives 31.24
+      // At 32 px the digits fit at 24px: '88' is 28.8 <= 0.92 * 32 and the
+      // cap 16.8 <= 0.56 * 32, while 25px makes '88' 30 wide. The unit
+      // starts and stays at round(0.45 * 24) = 11px ('min' is 19.8 wide).
       const [digits, unit] = lastContext(32).texts;
-      expect(digits).toMatchObject({ text: '28', color: '#ffffff', font: 'bold 18px sans-serif' });
-      expect(unit).toMatchObject({ text: 'm', font: 'bold 13px sans-serif' });
-      expect(digits.x).toBeCloseTo((32 - 30.04) / 2);
-      expect(unit.x).toBeCloseTo((32 - 30.04) / 2 + 21.6 + 0.64);
-      // Baseline at S / 2 + cap / 2 with cap = 0.7 * 18
-      expect(digits.y).toBeCloseTo(16 + 12.6 / 2);
-      expect(unit.y).toBeCloseTo(16 + 12.6 / 2);
-      // 16 px fits 9px digits: 10.8 + 0.32 + 3.6 = 14.72 <= 15.04
-      expect(lastContext(16).texts[0].font).toBe('bold 9px sans-serif');
+      expect(digits).toMatchObject({
+        text: '28', color: '#ffffff', font: 'bold 24px sans-serif', align: 'center', x: 16
+      });
+      expect(unit).toMatchObject({ text: 'min', font: 'bold 11px sans-serif', align: 'center', x: 16 });
+      // D = 16.8, gap = 1.92, U = 7.7, top = (32 - 26.42) / 2
+      const top = (32 - (16.8 + 1.92 + 7.7)) / 2;
+      expect(digits.y).toBeCloseTo(top + 16.8);
+      expect(unit.y).toBeCloseTo(top + 16.8 + 1.92 + 7.7);
+      expect(digits.y).toBeLessThan(unit.y);
     });
 
-    test('a label without a unit is drawn alone and centered', async() => {
+    test('16 px draws the unit letter, 24 px the word, for the same label', async() => {
+      await renderCountdownIcon('28m', ICON_STATES.running);
+
+      // 16 px fits 12px digits (14.4 <= 14.72, D = 8.4, gap 0.96). The letter
+      // starts at round(0.6 * 12) = 7px and fits: 8.4 + 0.96 + 4.9 <= 15
+      const [digits16, unit16] = lastContext(16).texts;
+      expect(digits16).toMatchObject({ text: '28', font: 'bold 12px sans-serif', x: 8 });
+      expect(unit16).toMatchObject({ text: 'm', font: 'bold 7px sans-serif', x: 8 });
+      const top16 = (16 - (8.4 + 0.96 + 4.9)) / 2;
+      expect(digits16.y).toBeCloseTo(top16 + 8.4);
+      expect(unit16.y).toBeCloseTo(top16 + 8.4 + 0.96 + 4.9);
+      // 24 px keeps the word: 18px digits, round(0.45 * 18) = 8px unit
+      const [digits24, unit24] = lastContext(24).texts;
+      expect(digits24).toMatchObject({ text: '28', font: 'bold 18px sans-serif' });
+      expect(unit24).toMatchObject({ text: 'min', font: 'bold 8px sans-serif' });
+    });
+
+    test('16 px letter shrinks until digits, gap and letter fit within S - 1', async() => {
+      // Letters rise 0.9 px per px of font: 7px gives 8.4 + 0.96 + 6.3 > 15,
+      // 6px gives 14.76
+      installCanvas((ctx) => {
+        ctx.measureText = jest.fn((text) => ({
+          width: fontPx(ctx.font) * 0.6 * text.length,
+          actualBoundingBoxAscent: fontPx(ctx.font) * (/^[msh]$/.test(text) ? 0.9 : 0.7)
+        }));
+      });
+
+      await renderCountdownIcon('41s', ICON_STATES.finalMinute);
+
+      const unit16 = lastContext(16).texts[1];
+      expect(unit16).toMatchObject({ text: 's', font: 'bold 6px sans-serif' });
+      expect(lastContext(32).texts[1].text).toBe('sec');
+    });
+
+    test('maps the unit letter to a word', async() => {
+      await renderCountdownIcon('5m', ICON_STATES.running);
+      const minutes = lastContext(32).texts[1].text;
+      await renderCountdownIcon('41s', ICON_STATES.finalMinute);
+      const seconds = lastContext(32).texts[1].text;
+      await renderCountdownIcon('2h', ICON_STATES.running);
+      const hours = lastContext(32).texts[1].text;
+
+      expect([minutes, seconds, hours]).toEqual(['min', 'sec', 'hr']);
+    });
+
+    test('a label without a unit is drawn alone, centered on its cap height', async() => {
       await renderCountdownIcon('?', ICON_STATES.running);
 
       const texts = lastContext(32).texts;
       expect(texts).toHaveLength(1);
-      expect(texts[0]).toMatchObject({ text: '?', color: '#ffffff' });
-      expect(texts[0].x).toBeCloseTo((32 - 10.8) / 2); // no gap without a unit
+      expect(texts[0]).toMatchObject({ text: '?', color: '#ffffff', align: 'center', x: 16 });
+      expect(texts[0].y).toBeCloseTo((32 + 16.8) / 2);
     });
 
-    test('digit size is fitted once per size and reused for every label', async() => {
+    test('digit and unit sizes are fitted once per size and reused for every label', async() => {
       await renderCountdownIcon('5m', ICON_STATES.running);
       await renderCountdownIcon('24h', ICON_STATES.running);
 
       const first = contexts.find((ctx) => ctx.size === 32);
       const second = lastContext(32);
       expect(first.measureText).toHaveBeenCalledWith('88');
+      expect(first.measureText).toHaveBeenCalledWith('min');
       expect(second).not.toBe(first);
-      expect(second.measureText).not.toHaveBeenCalledWith('88');
-      expect(first.texts[0].font).toBe('bold 18px sans-serif');
-      expect(second.texts[0].font).toBe('bold 18px sans-serif');
+      expect(second.measureText).not.toHaveBeenCalled();
+      expect(first.texts.map((t) => t.font)).toEqual(['bold 24px sans-serif', 'bold 11px sans-serif']);
+      expect(second.texts.map((t) => t.font)).toEqual(['bold 24px sans-serif', 'bold 11px sans-serif']);
     });
 
-    test('digit size also keeps the cap height within 0.68 of the icon', async() => {
-      // Narrow text, tall caps: only the cap limit binds, 21 * 1.0 <= 21.76
+    test('digit size also keeps the cap height within 0.56 of the icon', async() => {
+      // Narrow text, tall caps: only the cap limit binds, 17 <= 17.92
       installCanvas((ctx) => {
         ctx.measureText = jest.fn(() => ({ width: 0, actualBoundingBoxAscent: fontPx(ctx.font) }));
       });
 
       await renderCountdownIcon('5m', ICON_STATES.running);
 
-      expect(lastContext(32).texts[0].font).toBe('bold 21px sans-serif');
+      expect(lastContext(32).texts[0].font).toBe('bold 17px sans-serif');
     });
 
-    test('cap height falls back to 0.72 of the digit size without the metric', async() => {
-      // 0.72 * 30 = 21.6 <= 21.76, while 0.72 * 31 = 22.32 is too tall
+    test('unit size shrinks until the widest word fits 0.86 of the icon', async() => {
+      // Unit words 1 px wide per px of font per character: 'min' at 9px is
+      // 27 <= 27.52, at 10px it is 30
       installCanvas((ctx) => {
-        ctx.measureText = jest.fn(() => ({ width: 0 }));
+        ctx.measureText = jest.fn((text) => ({
+          width: fontPx(ctx.font) * (/^\d+$/.test(text) ? 0.6 : 1) * text.length,
+          actualBoundingBoxAscent: fontPx(ctx.font) * 0.7
+        }));
       });
 
       await renderCountdownIcon('5m', ICON_STATES.running);
 
-      const [digits] = lastContext(32).texts;
-      expect(digits.font).toBe('bold 30px sans-serif');
-      expect(digits.y).toBeCloseTo(16 + 0.72 * 30 / 2);
+      expect(lastContext(32).texts[1].font).toBe('bold 9px sans-serif');
+    });
+
+    test('U is the tallest unit word ascent', async() => {
+      // 'hr' rises 0.9 px per px of font, the other words 0.7
+      installCanvas((ctx) => {
+        ctx.measureText = jest.fn((text) => ({
+          width: fontPx(ctx.font) * 0.6 * text.length,
+          actualBoundingBoxAscent: fontPx(ctx.font) * (text === 'hr' ? 0.9 : 0.7)
+        }));
+      });
+
+      await renderCountdownIcon('5m', ICON_STATES.running);
+
+      const [digits, unit] = lastContext(32).texts;
+      const U = 0.9 * 11;
+      const top = (32 - (16.8 + 1.92 + U)) / 2;
+      expect(digits.y).toBeCloseTo(top + 16.8);
+      expect(unit.y).toBeCloseTo(top + 16.8 + 1.92 + U);
+    });
+
+    test('heights fall back to 0.72 and 0.55 of the font size without the metric', async() => {
+      // Digits: 0.72 * 24 = 17.28 <= 17.92, '88' at 25px is 30 wide.
+      // Unit: 11px, so U = 0.55 * 11
+      installCanvas((ctx) => {
+        ctx.measureText = jest.fn((text) => ({ width: fontPx(ctx.font) * 0.6 * text.length }));
+      });
+
+      await renderCountdownIcon('5m', ICON_STATES.running);
+
+      const [digits, unit] = lastContext(32).texts;
+      const D = 0.72 * 24;
+      const U = 0.55 * 11;
+      const top = (32 - (D + 1.92 + U)) / 2;
+      expect(digits.font).toBe('bold 24px sans-serif');
+      expect(digits.y).toBeCloseTo(top + D);
+      expect(unit.y).toBeCloseTo(top + D + 1.92 + U);
     });
 
     test('each state reaches the canvas with its gradient and unit color', async() => {
@@ -739,7 +824,7 @@ describe('Background Script Utility Functions', () => {
         expect.any(Function)
       );
       const ctx = lastContext(32);
-      expect(ctx.texts.map((t) => t.text)).toEqual(['29', 'm']);
+      expect(ctx.texts.map((t) => t.text)).toEqual(['29', 'min']);
       expect(ctx.gradients[0].stops).toEqual([[0, '#5a6a82'], [1, '#3a4659']]);
     });
 
@@ -761,7 +846,7 @@ describe('Background Script Utility Functions', () => {
       await runWithAlarm(45000);
 
       const ctx = lastContext(32);
-      expect(ctx.texts.map((t) => t.text)).toEqual(['45', 's']);
+      expect(ctx.texts.map((t) => t.text)).toEqual(['45', 'sec']);
       expect(ctx.gradients[0].stops).toEqual([[0, '#e5483a'], [1, '#b91f14']]);
     });
 
@@ -800,7 +885,7 @@ describe('Background Script Utility Functions', () => {
       expect(chrome.action.setIcon).toHaveBeenCalledWith(
         { tabId: 77, imageData: ALL_SIZES }, expect.any(Function));
       const ctx = lastContext(32);
-      expect(ctx.texts.map((t) => t.text)).toEqual(['1', 'm']);
+      expect(ctx.texts.map((t) => t.text)).toEqual(['1', 'min']);
       expect(ctx.gradients[0].stops).toEqual([[0, '#8a93a3'], [1, '#626a78']]);
       expect(chrome.action.setTitle).toHaveBeenCalledWith(
         { tabId: 77, title: 'Paused, 1:30 remaining' }, expect.any(Function));
