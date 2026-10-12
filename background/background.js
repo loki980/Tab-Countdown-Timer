@@ -237,11 +237,15 @@ const ChromeAPIWrapper = {
 };
 
 // URL/video-site helpers live in shared/video-site-utils.js so this file and
-// popup.js can't drift apart. importScripts only exists in the worker; Jest
-// loads this file under CommonJS.
+// popup.js can't drift apart. importScripts only exists in the Chrome service
+// worker. Firefox runs this file as an event page with no importScripts, so
+// the manifest's background.scripts loads the helper first and it is already
+// on self. Jest loads this file under CommonJS.
 let VideoSiteUtils;
 if (typeof importScripts === 'function') {
   importScripts('../shared/video-site-utils.js');
+  VideoSiteUtils = self.VideoSiteUtils;
+} else if (typeof self !== 'undefined' && self.VideoSiteUtils) {
   VideoSiteUtils = self.VideoSiteUtils;
 } else {
   VideoSiteUtils = require('../shared/video-site-utils.js');

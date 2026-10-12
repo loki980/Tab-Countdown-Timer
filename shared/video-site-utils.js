@@ -1,7 +1,8 @@
 // Video-site URL helpers shared by the service worker and the popup.
-// Loaded three ways: importScripts() in background/background.js, a <script>
-// tag in popup/popup.html (attaches root.VideoSiteUtils), and require() in
-// Jest. Keep this file dependency-free.
+// Loaded four ways: importScripts() in background/background.js (Chrome
+// service worker), the manifest's background.scripts list (Firefox event
+// page), a <script> tag in popup/popup.html, and require() in Jest. All but
+// Jest attach root.VideoSiteUtils. Keep this file dependency-free.
 (function(root, factory) {
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = factory();
