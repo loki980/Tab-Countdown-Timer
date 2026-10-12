@@ -352,7 +352,8 @@ function formatIconText(d) {
   return Math.round(totalMinutes / 60) + 'h';
 }
 
-const ICON_SIZES = [16, 32];
+// 24 serves 1.5x displays and 48 serves 3x, so no size is scaled down.
+const ICON_SIZES = [16, 24, 32, 48];
 const DEFAULT_ICON_TITLE = 'Tab Countdown Timer';
 const DEFAULT_ICON_PATHS = {
   16: '/icons/hourglass16.png',
@@ -360,134 +361,122 @@ const DEFAULT_ICON_PATHS = {
   48: '/icons/hourglass48.png',
   128: '/icons/hourglass128.png'
 };
-const ICON_COLOR_RUNNING = '#3d4a58';
-const ICON_COLOR_FINAL_MINUTE = '#d92d20';
-const ICON_COLOR_PAUSED = '#6b7280';
+// Plate gradient (top to bottom) and unit color for each timer state.
+const ICON_UNIT_SOFT = 'rgba(255,255,255,0.85)';
+const ICON_COLOR_RUNNING = { top: '#5a6a82', bottom: '#3a4659', unit: '#f5cf87' };
+const ICON_COLOR_FINAL_MINUTE = { top: '#e5483a', bottom: '#b91f14', unit: ICON_UNIT_SOFT };
+const ICON_COLOR_PAUSED = { top: '#8a93a3', bottom: '#626a78', unit: ICON_UNIT_SOFT };
 const BADGE_COLOR_DEFAULT = '#666666';
 const BADGE_COLOR_WARNING = '#ff0000';
 
-// Hourglass bitmaps for each rendered size, loaded once per background
-// lifetime. A rejected load stays cached so every later tick goes straight
-// to the badge fallback instead of refetching.
-let iconBitmapsPromise = null;
+const ICON_DIGIT_COLOR = '#ffffff';
+const ICON_PLATE_STROKE = 'rgba(255,255,255,0.18)';
+const ICON_UNIT_SCALE = 0.7;
+const ICON_MAX_WIDTH = 0.94;
+const ICON_MAX_CAP = 0.68;
+const ICON_GAP = 0.02;
 
-function loadIconBitmaps() {
-  if (iconBitmapsPromise === null) {
-    iconBitmapsPromise = Promise.all(ICON_SIZES.map(async(size) => {
-      const response = await fetch(chrome.runtime.getURL('icons/hourglass' + size + '.png'));
-      if (!response.ok) {
-        throw new Error('Failed to load hourglass' + size + '.png');
+// Splits a label such as '28m' into its digits and unit. Labels without a
+// unit (such as '?') keep the whole text as digits.
+function splitIconText(text) {
+  const match = /^(\d+)([a-z]?)$/.exec(text);
+  return match ? [match[1], match[2]] : [text, ''];
+}
+
+function boldFont(size) {
+  return 'bold ' + size + 'px sans-serif';
+}
+
+// Height of the digits above the baseline at the current font.
+function capHeight(ctx, fontSize) {
+  const ascent = ctx.measureText('8').actualBoundingBoxAscent;
+  return typeof ascent === 'number' ? ascent : 0.72 * fontSize;
+}
+
+// Digit size per icon size, fitted once to the widest label ('88' + 'm') so
+// the text does not change size as it ticks.
+const iconDigitSizes = new Map();
+
+function iconDigitSize(ctx, S) {
+  if (!iconDigitSizes.has(S)) {
+    let size = Math.ceil(1.2 * S);
+    for (; size > 6; size--) {
+      ctx.font = boldFont(size);
+      const digitsWidth = ctx.measureText('88').width;
+      const cap = capHeight(ctx, size);
+      ctx.font = boldFont(Math.round(size * ICON_UNIT_SCALE));
+      const unitWidth = ctx.measureText('m').width;
+      if (digitsWidth + ICON_GAP * S + unitWidth <= ICON_MAX_WIDTH * S && cap <= ICON_MAX_CAP * S) {
+        break;
       }
-      return createImageBitmap(await response.blob());
-    })).then((bitmaps) => {
-      const bySize = {};
-      ICON_SIZES.forEach((size, i) => {
-        bySize[size] = bitmaps[i];
-      });
-      return bySize;
-    });
-  }
-  return iconBitmapsPromise;
-}
-
-// Test hook: forget the cached bitmaps and font sizes so a test can load
-// and fit them again.
-function resetIconBitmapCache() {
-  iconBitmapsPromise = null;
-  iconFontSizes.clear();
-}
-
-// Label layout for an icon of size S. At 32 px the label is a pill with a
-// white rim over the lower half. At 16 px a rim would leave the text only a
-// few pixels tall, so the label is taller, has no rim and its letters are
-// pulled together.
-function labelGeometry(S) {
-  if (S === 16) {
-    const h = 10;
-    return {
-      h,
-      rim: 0,
-      radius: 0.4 * h,
-      fontStart: Math.ceil(0.95 * h),
-      maxWidth: 16,
-      letterSpacing: '-0.5px',
-      textY: 16 - h / 2 + 0.5
-    };
-  }
-  const h = Math.round(0.5 * S);
-  const b = Math.max(1, Math.round(S / 16));
-  return {
-    h,
-    rim: b,
-    radius: 0.4 * (h - 2 * b),
-    fontStart: Math.ceil(0.95 * (h - 2 * b)),
-    maxWidth: 0.86 * S,
-    letterSpacing: null,
-    textY: S - h / 2 + 0.03 * S
-  };
-}
-
-// Label font size per icon size, fitted once to the widest label ('88m')
-// so the text does not change size as it ticks.
-const ICON_FONT_REFERENCE_TEXT = '88m';
-const iconFontSizes = new Map();
-
-function iconFontSize(ctx, S, geometry) {
-  if (!iconFontSizes.has(S)) {
-    let fontSize = geometry.fontStart;
-    ctx.font = 'bold ' + fontSize + 'px sans-serif';
-    while (fontSize > 5 && ctx.measureText(ICON_FONT_REFERENCE_TEXT).width > geometry.maxWidth) {
-      fontSize--;
-      ctx.font = 'bold ' + fontSize + 'px sans-serif';
     }
-    iconFontSizes.set(S, fontSize);
+    iconDigitSizes.set(S, size);
   }
-  return iconFontSizes.get(S);
+  return iconDigitSizes.get(S);
 }
 
-// Draws the hourglass at size S with the label over its lower part. The
-// browser badge is too narrow for the countdown (Firefox clips it after 2
-// to 3 characters), so the time is drawn into the icon.
-function drawIconLabel(ctx, S, bitmap, text, color) {
-  ctx.drawImage(bitmap, 0, 0, S, S);
+// Test hook: forget the fitted digit sizes so a test can fit them again.
+function resetIconFitCache() {
+  iconDigitSizes.clear();
+}
 
-  const geometry = labelGeometry(S);
-  const { h, rim } = geometry;
-  if (rim > 0) {
-    ctx.beginPath();
-    ctx.roundRect(0, S - h, S, h, 0.4 * h);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
-  }
+// Fills the icon with a rounded plate in the state's gradient and a faint
+// light edge.
+function drawIconPlate(ctx, S, state) {
   ctx.beginPath();
-  ctx.roundRect(rim, S - h + rim, S - 2 * rim, h - 2 * rim, geometry.radius);
-  ctx.fillStyle = color;
+  ctx.roundRect(0, 0, S, S, 0.24 * S);
+  const gradient = ctx.createLinearGradient(0, 0, 0, S);
+  gradient.addColorStop(0, state.top);
+  gradient.addColorStop(1, state.bottom);
+  ctx.fillStyle = gradient;
   ctx.fill();
 
-  const previousLetterSpacing = ctx.letterSpacing;
-  if (geometry.letterSpacing) {
-    ctx.letterSpacing = geometry.letterSpacing;
-  }
-  ctx.font = 'bold ' + iconFontSize(ctx, S, geometry) + 'px sans-serif';
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, S / 2, geometry.textY);
-  if (geometry.letterSpacing) {
-    ctx.letterSpacing = previousLetterSpacing;
+  ctx.beginPath();
+  ctx.roundRect(0.5, 0.5, S - 1, S - 1, 0.24 * S);
+  ctx.strokeStyle = ICON_PLATE_STROKE;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+// Draws the remaining time on a plate that fills the icon in place of the
+// hourglass: big white digits and a smaller unit, centered as a pair. The
+// browser badge is too narrow for the countdown (Firefox clips it after 2
+// to 3 characters), so the time is drawn as the icon itself.
+function drawCountdownIcon(ctx, S, text, state) {
+  drawIconPlate(ctx, S, state);
+
+  const [digits, unit] = splitIconText(text);
+  const digitSize = iconDigitSize(ctx, S);
+  const unitSize = Math.round(digitSize * ICON_UNIT_SCALE);
+  ctx.font = boldFont(digitSize);
+  const digitsWidth = ctx.measureText(digits).width;
+  const cap = capHeight(ctx, digitSize);
+  ctx.font = boldFont(unitSize);
+  const unitWidth = unit ? ctx.measureText(unit).width : 0;
+  const gap = unit ? ICON_GAP * S : 0;
+  const x = (S - (digitsWidth + gap + unitWidth)) / 2;
+  const baseline = S / 2 + cap / 2;
+
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.font = boldFont(digitSize);
+  ctx.fillStyle = ICON_DIGIT_COLOR;
+  ctx.fillText(digits, x, baseline);
+  if (unit) {
+    ctx.font = boldFont(unitSize);
+    ctx.fillStyle = state.unit;
+    ctx.fillText(unit, x + digitsWidth + gap, baseline);
   }
 }
 
-// Renders the labeled icon at every size in ICON_SIZES. Resolves to the
-// imageData map for action.setIcon, or null when OffscreenCanvas or
-// createImageBitmap is missing or anything fails, so callers can fall back
-// to badge text.
-async function renderCountdownIcon(text, color) {
-  if (typeof OffscreenCanvas === 'undefined' || typeof createImageBitmap === 'undefined') {
+// Renders the countdown icon at every size in ICON_SIZES. Resolves to the
+// imageData map for action.setIcon, or null when OffscreenCanvas is missing
+// or anything fails, so callers can fall back to badge text.
+async function renderCountdownIcon(text, state) {
+  if (typeof OffscreenCanvas === 'undefined') {
     return null;
   }
   try {
-    const bitmaps = await loadIconBitmaps();
     const imageData = {};
     for (const S of ICON_SIZES) {
       const canvas = new OffscreenCanvas(S, S);
@@ -495,7 +484,7 @@ async function renderCountdownIcon(text, color) {
       if (!ctx) {
         return null;
       }
-      drawIconLabel(ctx, S, bitmaps[S], text, color);
+      drawCountdownIcon(ctx, S, text, state);
       imageData[S] = ctx.getImageData(0, 0, S, S);
     }
     return imageData;
@@ -952,7 +941,10 @@ if (typeof module !== 'undefined' && module.exports) {
     FormatExactDuration,
     formatIconText,
     renderCountdownIcon,
-    resetIconBitmapCache,
+    resetIconFitCache,
+    ICON_COLOR_RUNNING,
+    ICON_COLOR_FINAL_MINUTE,
+    ICON_COLOR_PAUSED,
     ChromeAPIWrapper,
     HandleRemove,
     UpdateBadges,

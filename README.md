@@ -9,7 +9,7 @@ A productivity-focused browser extension (Chrome, Edge, Brave, Firefox) that hel
 
 - **Custom Timers**: Set timers for any tab using hours (0-24) and minutes (0-59) via intuitive inputs.
 - **YouTube-Specific Actions**: For YouTube watch pages, choose to pause the video instead of closing the tab (default for YouTube).
-- **Real-Time Feedback**: The toolbar hourglass shows the remaining time as a label with its unit (e.g., "29m", "2h", or ticking seconds like "45s" in red during the final minute), updates every second, and grays when paused. Hovering the icon shows the exact time left and when the tab closes or the video pauses.
+- **Real-Time Feedback**: While a timer runs, the toolbar hourglass is replaced by a rounded plate showing the remaining time in large digits with a smaller unit (e.g., "29m", "2h", or ticking seconds like "45s" on a red plate during the final minute). It updates every second and turns gray when paused. Hovering the icon shows the exact time left and when the tab closes or the video pauses.
 - **Controls**: Pause/resume, cancel timers; supports multiple tabs simultaneously.
 - **Persistent Timers**: Running or paused timers are saved when tabs close and automatically restore when reopening the same URL (7-day expiration).
 - **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs. For YouTube, choose "This exact video" or "All YouTube videos". Supports duration mode (countdown from open) or time-of-day mode (expires at a specific time when you next open the URL).
@@ -58,8 +58,8 @@ The extension requests the following permissions in `manifest.json`:
 1. Click the extension icon (hourglass) in the browser toolbar to open the popup.
 2. Select a preset or enter hours/minutes (e.g., 0h 30m).
 3. For YouTube tabs, choose "Pause Video" or "Close Tab" via radio buttons.
-4. Click "Start timer" - a countdown label (e.g., "29m") appears on the toolbar hourglass.
-5. **Pause/Resume**: Click the pause button. The icon label turns gray and keeps the remaining time while paused.
+4. Click "Start timer" - the toolbar hourglass is replaced by a rounded plate showing the countdown (e.g., "29m").
+5. **Pause/Resume**: Click the pause button. The plate turns gray and keeps the remaining time while paused.
 6. **Cancel**: Click "Cancel timer" to stop the timer and return the icon to the plain hourglass.
 7. On expiry: Tab closes (default) or video pauses (YouTube), and the icon returns to the plain hourglass.
 
@@ -78,10 +78,10 @@ The extension requests the following permissions in `manifest.json`:
 **Rule precedence**: Specific YouTube video rules take priority over "All YouTube videos" rules, which take priority over exact URL rules.
 
 ## Screenshots
-*(Add visual aids here if available: e.g., popup UI, toolbar icon label examples. Currently, no images in repo – consider adding.)*
+*(Add visual aids here if available: e.g., popup UI, toolbar countdown plate examples. Currently, no images in repo – consider adding.)*
 
 - Popup interface: Clean form with inputs, presets, and action options.
-- Toolbar icon: Shows a label such as "29m" in slate, "45s" in red during the final minute, or gray when paused, and returns to the plain hourglass after expiry.
+- Toolbar icon: A rounded plate in place of the hourglass shows "29m" in slate, "45s" in red during the final minute, or gray when paused, and the plain hourglass returns after expiry.
 
 ## Project Structure
 
@@ -176,7 +176,7 @@ Current coverage: Core utilities (e.g., `FormatDuration`), alarm handling, YouTu
 ### v1.7.0 (Recent)
 - **Firefox support**: The same package installs in Firefox 140+ (desktop), with the background script running as an event page.
 - Bundled jQuery updated to 3.7.1.
-- **Icon countdown label**: The remaining time is drawn over the toolbar icon instead of in the badge, which Firefox clips after 2 to 3 characters.
+- **Icon countdown plate**: While a timer runs, the toolbar icon becomes a rounded plate showing the remaining time instead of using the badge, which Firefox clips after 2 to 3 characters.
 
 ### v1.5.0
 - **Auto-Start Timers**: Create rules to automatically start timers when opening matching URLs.
