@@ -58,10 +58,10 @@ The extension requests the following permissions in `manifest.json`:
 1. Click the extension icon (hourglass) in the browser toolbar to open the popup.
 2. Select a preset or enter hours/minutes (e.g., 0h 30m).
 3. For YouTube tabs, choose "Pause Video" or "Close Tab" via radio buttons.
-4. Click "Start timer" – the badge appears with countdown.
-5. **Pause/Resume**: Click the pause button; badge grays out when paused.
-6. **Cancel**: Click "Cancel timer" to stop and clear the badge.
-7. On expiry: Tab closes (default) or video pauses (YouTube); badge clears.
+4. Click "Start timer" - a countdown label (e.g., "29m") appears on the toolbar hourglass.
+5. **Pause/Resume**: Click the pause button. The icon label turns gray and keeps the remaining time while paused.
+6. **Cancel**: Click "Cancel timer" to stop the timer and return the icon to the plain hourglass.
+7. On expiry: Tab closes (default) or video pauses (YouTube), and the icon returns to the plain hourglass.
 
 ### Auto-Start Timers
 1. Open the popup on any tab and check "Start timer when I visit this URL".

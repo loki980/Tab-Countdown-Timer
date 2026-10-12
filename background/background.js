@@ -397,16 +397,46 @@ function resetIconBitmapCache() {
   iconFontSizes.clear();
 }
 
+// Label layout for an icon of size S. At 32 px the label is a pill with a
+// white rim over the lower half. At 16 px a rim would leave the text only a
+// few pixels tall, so the label is taller, has no rim and its letters are
+// pulled together.
+function labelGeometry(S) {
+  if (S === 16) {
+    const h = 10;
+    return {
+      h,
+      rim: 0,
+      radius: 0.4 * h,
+      fontStart: Math.ceil(0.95 * h),
+      maxWidth: 16,
+      letterSpacing: '-0.5px',
+      textY: 16 - h / 2 + 0.5
+    };
+  }
+  const h = Math.round(0.5 * S);
+  const b = Math.max(1, Math.round(S / 16));
+  return {
+    h,
+    rim: b,
+    radius: 0.4 * (h - 2 * b),
+    fontStart: Math.ceil(0.95 * (h - 2 * b)),
+    maxWidth: 0.86 * S,
+    letterSpacing: null,
+    textY: S - h / 2 + 0.03 * S
+  };
+}
+
 // Label font size per icon size, fitted once to the widest label ('88m')
 // so the text does not change size as it ticks.
 const ICON_FONT_REFERENCE_TEXT = '88m';
 const iconFontSizes = new Map();
 
-function iconFontSize(ctx, S, innerHeight) {
+function iconFontSize(ctx, S, geometry) {
   if (!iconFontSizes.has(S)) {
-    let fontSize = Math.ceil(0.95 * innerHeight);
+    let fontSize = geometry.fontStart;
     ctx.font = 'bold ' + fontSize + 'px sans-serif';
-    while (fontSize > 5 && ctx.measureText(ICON_FONT_REFERENCE_TEXT).width > 0.86 * S) {
+    while (fontSize > 5 && ctx.measureText(ICON_FONT_REFERENCE_TEXT).width > geometry.maxWidth) {
       fontSize--;
       ctx.font = 'bold ' + fontSize + 'px sans-serif';
     }
@@ -415,28 +445,37 @@ function iconFontSize(ctx, S, innerHeight) {
   return iconFontSizes.get(S);
 }
 
-// Draws the hourglass at size S with the label in an outlined pill over its
-// lower half. The browser badge is too narrow for the countdown (Firefox
-// clips it after 2 to 3 characters), so the time is drawn into the icon.
+// Draws the hourglass at size S with the label over its lower part. The
+// browser badge is too narrow for the countdown (Firefox clips it after 2
+// to 3 characters), so the time is drawn into the icon.
 function drawIconLabel(ctx, S, bitmap, text, color) {
   ctx.drawImage(bitmap, 0, 0, S, S);
 
-  const h = Math.round(0.5 * S);
-  const b = Math.max(1, Math.round(S / 16));
+  const geometry = labelGeometry(S);
+  const { h, rim } = geometry;
+  if (rim > 0) {
+    ctx.beginPath();
+    ctx.roundRect(0, S - h, S, h, 0.4 * h);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill();
+  }
   ctx.beginPath();
-  ctx.roundRect(0, S - h, S, h, 0.4 * h);
-  ctx.fillStyle = '#ffffff';
-  ctx.fill();
-  ctx.beginPath();
-  ctx.roundRect(b, S - h + b, S - 2 * b, h - 2 * b, 0.4 * (h - 2 * b));
+  ctx.roundRect(rim, S - h + rim, S - 2 * rim, h - 2 * rim, geometry.radius);
   ctx.fillStyle = color;
   ctx.fill();
 
-  ctx.font = 'bold ' + iconFontSize(ctx, S, h - 2 * b) + 'px sans-serif';
+  const previousLetterSpacing = ctx.letterSpacing;
+  if (geometry.letterSpacing) {
+    ctx.letterSpacing = geometry.letterSpacing;
+  }
+  ctx.font = 'bold ' + iconFontSize(ctx, S, geometry) + 'px sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, S / 2, S - h / 2 + 0.03 * S);
+  ctx.fillText(text, S / 2, geometry.textY);
+  if (geometry.letterSpacing) {
+    ctx.letterSpacing = previousLetterSpacing;
+  }
 }
 
 // Renders the labeled icon at every size in ICON_SIZES. Resolves to the

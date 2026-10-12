@@ -598,6 +598,7 @@ describe('Background Script Utility Functions', () => {
         { bitmapOf: 'chrome-extension://test-id/icons/hourglass16.png' }, 0, 0, 16, 16);
       expect(ctx32.drawImage).toHaveBeenCalledWith(
         { bitmapOf: 'chrome-extension://test-id/icons/hourglass32.png' }, 0, 0, 32, 32);
+      expect(ctx32.letterSpacing).toBeUndefined();
       // White pill (h = round(0.5 * 32) = 16) then the inset fill (b = 2)
       expect(ctx32.roundRect).toHaveBeenNthCalledWith(1, 0, 16, 32, 16, 16 * 0.4);
       expect(ctx32.roundRect).toHaveBeenNthCalledWith(2, 2, 18, 28, 12, 12 * 0.4);
@@ -605,6 +606,42 @@ describe('Background Script Utility Functions', () => {
       expect(ctx32.fillText).toHaveBeenCalledWith('29m', 16, 32 - 16 / 2 + 32 * 0.03);
       // ceil(0.95 * 12) when the reference text already fits
       expect(ctx32.font).toBe('bold 12px sans-serif');
+    });
+
+    test('16 px label is taller, has no rim and tightens the letters', async() => {
+      // Record the letter spacing in effect when text is measured and drawn
+      global.OffscreenCanvas = jest.fn((w) => ({
+        getContext: () => {
+          const ctx = makeContext(w);
+          ctx.spacingAtMeasure = [];
+          ctx.measureText = jest.fn(() => {
+            ctx.spacingAtMeasure.push(ctx.letterSpacing);
+            return { width: parseInt(ctx.font.split(' ')[1]) * 2 };
+          });
+          ctx.fillText = jest.fn(() => {
+            ctx.spacingAtDraw = ctx.letterSpacing;
+          });
+          contexts.push(ctx);
+          return ctx;
+        }
+      }));
+
+      await renderCountdownIcon('29m', '#3d4a58');
+
+      const ctx16 = contexts[0];
+      // h = 10: only the state-color rect (0, 6, 16, 10), no white rim
+      expect(ctx16.roundRect).toHaveBeenCalledTimes(1);
+      expect(ctx16.roundRect).toHaveBeenCalledWith(0, 6, 16, 10, 4);
+      expect(ctx16.fills).toEqual(['#3d4a58']);
+      // Starts at ceil(0.95 * 10) = 10px, 2 px wide per px of font, so 8px
+      // is the largest size whose '88m' fits within 16
+      expect(ctx16.measureText).toHaveBeenCalledWith('88m');
+      expect(ctx16.spacingAtMeasure.every((v) => v === '-0.5px')).toBe(true);
+      expect(ctx16.font).toBe('bold 8px sans-serif');
+      expect(ctx16.spacingAtDraw).toBe('-0.5px');
+      expect(ctx16.fillText).toHaveBeenCalledWith('29m', 8, 16 - 10 / 2 + 0.5);
+      // Spacing is reset after drawing
+      expect(ctx16.letterSpacing).toBeUndefined();
     });
 
     test('fits the font to 88m within 0.86 of the icon width, once per size', async() => {
