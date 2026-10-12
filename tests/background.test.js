@@ -660,9 +660,40 @@ describe('Background Script Utility Functions', () => {
       expect(digits.y).toBeCloseTo(top + 16.8);
       expect(unit.y).toBeCloseTo(top + 16.8 + 1.92 + 7.7);
       expect(digits.y).toBeLessThan(unit.y);
-      // 16 px fits 12px digits (14.4 <= 14.72) and a 5px unit
-      const small = lastContext(16).texts;
-      expect(small.map((t) => t.font)).toEqual(['bold 12px sans-serif', 'bold 5px sans-serif']);
+    });
+
+    test('16 px draws the unit letter, 24 px the word, for the same label', async() => {
+      await renderCountdownIcon('28m', ICON_STATES.running);
+
+      // 16 px fits 12px digits (14.4 <= 14.72, D = 8.4, gap 0.96). The letter
+      // starts at round(0.6 * 12) = 7px and fits: 8.4 + 0.96 + 4.9 <= 15
+      const [digits16, unit16] = lastContext(16).texts;
+      expect(digits16).toMatchObject({ text: '28', font: 'bold 12px sans-serif', x: 8 });
+      expect(unit16).toMatchObject({ text: 'm', font: 'bold 7px sans-serif', x: 8 });
+      const top16 = (16 - (8.4 + 0.96 + 4.9)) / 2;
+      expect(digits16.y).toBeCloseTo(top16 + 8.4);
+      expect(unit16.y).toBeCloseTo(top16 + 8.4 + 0.96 + 4.9);
+      // 24 px keeps the word: 18px digits, round(0.45 * 18) = 8px unit
+      const [digits24, unit24] = lastContext(24).texts;
+      expect(digits24).toMatchObject({ text: '28', font: 'bold 18px sans-serif' });
+      expect(unit24).toMatchObject({ text: 'min', font: 'bold 8px sans-serif' });
+    });
+
+    test('16 px letter shrinks until digits, gap and letter fit within S - 1', async() => {
+      // Letters rise 0.9 px per px of font: 7px gives 8.4 + 0.96 + 6.3 > 15,
+      // 6px gives 14.76
+      installCanvas((ctx) => {
+        ctx.measureText = jest.fn((text) => ({
+          width: fontPx(ctx.font) * 0.6 * text.length,
+          actualBoundingBoxAscent: fontPx(ctx.font) * (/^[msh]$/.test(text) ? 0.9 : 0.7)
+        }));
+      });
+
+      await renderCountdownIcon('41s', ICON_STATES.finalMinute);
+
+      const unit16 = lastContext(16).texts[1];
+      expect(unit16).toMatchObject({ text: 's', font: 'bold 6px sans-serif' });
+      expect(lastContext(32).texts[1].text).toBe('sec');
     });
 
     test('maps the unit letter to a word', async() => {

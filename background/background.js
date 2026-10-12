@@ -377,8 +377,12 @@ const ICON_DIGIT_MAX_CAP = 0.56;
 const ICON_UNIT_SCALE = 0.45;
 const ICON_UNIT_MAX_WIDTH = 0.86;
 const ICON_GAP = 0.06;
-// The unit letter from formatIconText is drawn as a word beneath the digits.
+// The unit letter from formatIconText is drawn as a word beneath the digits,
+// except at 16 px where a word would be too small to read and the letter
+// itself is drawn larger instead.
 const ICON_UNIT_WORDS = { m: 'min', s: 'sec', h: 'hr' };
+const ICON_LETTER_UNIT_SIZE = 16;
+const ICON_LETTER_UNIT_SCALE = 0.6;
 
 // Splits a label such as '28m' into its digits and unit. Labels without a
 // unit (such as '?') keep the whole text as digits.
@@ -400,7 +404,8 @@ function ascentOf(ctx, text, fontSize, fallbackRatio) {
 
 // Text sizes per icon size, fitted once to the widest labels ('88' and the
 // widest unit word) so the text does not change size as it ticks. D is the
-// digit cap height and U the tallest unit word ascent.
+// digit cap height and U the tallest unit ascent. At 16 px the unit is a
+// letter, sized as large as fits under the digits.
 const iconTextLayouts = new Map();
 
 function iconTextLayout(ctx, S) {
@@ -416,17 +421,30 @@ function iconTextLayout(ctx, S) {
     ctx.font = boldFont(digitSize);
     const D = ascentOf(ctx, '8', digitSize, 0.72);
 
-    const words = Object.values(ICON_UNIT_WORDS);
-    const widestWord = () => Math.max(...words.map((word) => ctx.measureText(word).width));
-    let unitSize = Math.round(ICON_UNIT_SCALE * digitSize);
-    ctx.font = boldFont(unitSize);
-    while (unitSize > 5 && widestWord() > ICON_UNIT_MAX_WIDTH * S) {
-      unitSize--;
+    const useWords = S !== ICON_LETTER_UNIT_SIZE;
+    const units = useWords ? Object.values(ICON_UNIT_WORDS) : Object.keys(ICON_UNIT_WORDS);
+    const tallestUnit = (size) => Math.max(...units.map((u) => ascentOf(ctx, u, size, 0.55)));
+    let unitSize;
+    if (useWords) {
+      const widestWord = () => Math.max(...units.map((word) => ctx.measureText(word).width));
+      unitSize = Math.round(ICON_UNIT_SCALE * digitSize);
       ctx.font = boldFont(unitSize);
+      while (unitSize > 5 && widestWord() > ICON_UNIT_MAX_WIDTH * S) {
+        unitSize--;
+        ctx.font = boldFont(unitSize);
+      }
+    } else {
+      const gap = ICON_GAP * S;
+      unitSize = Math.round(ICON_LETTER_UNIT_SCALE * digitSize);
+      ctx.font = boldFont(unitSize);
+      while (unitSize > 5 && D + gap + tallestUnit(unitSize) > S - 1) {
+        unitSize--;
+        ctx.font = boldFont(unitSize);
+      }
     }
-    const U = Math.max(...words.map((word) => ascentOf(ctx, word, unitSize, 0.55)));
+    const U = tallestUnit(unitSize);
 
-    iconTextLayouts.set(S, { digitSize, D, unitSize, U });
+    iconTextLayouts.set(S, { digitSize, D, unitSize, U, useWords });
   }
   return iconTextLayouts.get(S);
 }
@@ -462,7 +480,7 @@ function drawCountdownIcon(ctx, S, text, state) {
   drawIconPlate(ctx, S, state);
 
   const [digits, unit] = splitIconText(text);
-  const { digitSize, D, unitSize, U } = iconTextLayout(ctx, S);
+  const { digitSize, D, unitSize, U, useWords } = iconTextLayout(ctx, S);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'alphabetic';
 
@@ -481,7 +499,8 @@ function drawCountdownIcon(ctx, S, text, state) {
   ctx.fillText(digits, S / 2, top + D);
   ctx.font = boldFont(unitSize);
   ctx.fillStyle = state.unit;
-  ctx.fillText(ICON_UNIT_WORDS[unit] || unit, S / 2, top + D + gap + U);
+  const unitText = useWords && ICON_UNIT_WORDS[unit] ? ICON_UNIT_WORDS[unit] : unit;
+  ctx.fillText(unitText, S / 2, top + D + gap + U);
 }
 
 // Renders the countdown icon at every size in ICON_SIZES. Resolves to the
