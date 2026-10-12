@@ -4,7 +4,10 @@ const {
   FormatExactDuration,
   formatIconText,
   renderCountdownIcon,
-  resetIconBitmapCache,
+  resetIconFitCache,
+  ICON_COLOR_RUNNING,
+  ICON_COLOR_FINAL_MINUTE,
+  ICON_COLOR_PAUSED,
   ChromeAPIWrapper,
   HandleRemove,
   UpdateBadges,
@@ -492,11 +495,11 @@ describe('Background Script Utility Functions', () => {
   });
 
   /**
-   * Tests for the countdown label drawn into the toolbar icon. jsdom has no
-   * OffscreenCanvas or createImageBitmap, so both are mocked here along with
-   * fetch for the hourglass PNGs.
+   * Tests for the countdown plate drawn as the toolbar icon. jsdom has no
+   * OffscreenCanvas, so it is mocked here with a 2d context that records
+   * gradients, strokes and the color and font of every fillText call.
    */
-  describe('Toolbar icon label', () => {
+  describe('Toolbar icon plate', () => {
     const { createChromeMocks } = require('./setup/chrome-mocks');
     const DEFAULT_PATHS = {
       16: '/icons/hourglass16.png',
@@ -504,8 +507,18 @@ describe('Background Script Utility Functions', () => {
       48: '/icons/hourglass48.png',
       128: '/icons/hourglass128.png'
     };
+    const ALL_SIZES = {
+      16: { imageSize: 16 },
+      24: { imageSize: 24 },
+      32: { imageSize: 32 },
+      48: { imageSize: 48 }
+    };
+    const ICON_STATES = {
+      running: ICON_COLOR_RUNNING,
+      finalMinute: ICON_COLOR_FINAL_MINUTE,
+      paused: ICON_COLOR_PAUSED
+    };
     let contexts;
-    let realFetch;
 
     const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -515,47 +528,69 @@ describe('Background Script Utility Functions', () => {
       }
     };
 
-    // Canvas context mock that records the fillStyle of each fill() call.
+    const fontPx = (font) => parseInt(font.split(' ')[1]);
+
+    // Canvas context mock. Text is 0.6 px wide per px of font per character
+    // and its cap height is 0.7 px per px of font, unless a test overrides
+    // measureText.
     const makeContext = (size) => {
       const ctx = {
         size,
+        font: '',
         fills: [],
-        drawImage: jest.fn(),
+        texts: [],
+        gradients: [],
+        strokes: [],
         beginPath: jest.fn(),
         roundRect: jest.fn(),
+        createLinearGradient: jest.fn((...args) => {
+          const gradient = {
+            args,
+            stops: [],
+            addColorStop: (offset, color) => gradient.stops.push([offset, color])
+          };
+          ctx.gradients.push(gradient);
+          return gradient;
+        }),
         fill: jest.fn(() => ctx.fills.push(ctx.fillStyle)),
-        fillText: jest.fn(),
-        measureText: jest.fn(() => ({ width: 0 })),
+        stroke: jest.fn(() => ctx.strokes.push({ style: ctx.strokeStyle, width: ctx.lineWidth })),
+        fillText: jest.fn((text, x, y) => ctx.texts.push({
+          text, x, y, color: ctx.fillStyle, font: ctx.font
+        })),
+        measureText: jest.fn((text) => ({
+          width: fontPx(ctx.font) * 0.6 * text.length,
+          actualBoundingBoxAscent: fontPx(ctx.font) * 0.7
+        })),
         getImageData: jest.fn(() => ({ imageSize: size }))
       };
       return ctx;
     };
 
-    beforeEach(() => {
-      jest.useRealTimers();
-      global.chrome = createChromeMocks();
-      contexts = [];
-      realFetch = global.fetch;
+    const installCanvas = (setup = () => {}) => {
       global.OffscreenCanvas = jest.fn((w) => ({
         getContext: () => {
           const ctx = makeContext(w);
+          setup(ctx);
           contexts.push(ctx);
           return ctx;
         }
       }));
-      global.createImageBitmap = jest.fn((blob) => Promise.resolve({ bitmapOf: blob.url }));
-      global.fetch = jest.fn((url) => Promise.resolve({
-        ok: true,
-        blob: () => Promise.resolve({ url })
-      }));
-      resetIconBitmapCache();
+    };
+
+    // Context drawn at size S during the latest render.
+    const lastContext = (S) => contexts.filter((ctx) => ctx.size === S).pop();
+
+    beforeEach(() => {
+      jest.useRealTimers();
+      global.chrome = createChromeMocks();
+      contexts = [];
+      installCanvas();
+      resetIconFitCache();
     });
 
     afterEach(() => {
       delete global.OffscreenCanvas;
-      delete global.createImageBitmap;
-      global.fetch = realFetch;
-      resetIconBitmapCache();
+      resetIconFitCache();
       stopBadgePolling();
       jest.restoreAllMocks();
     });
@@ -587,109 +622,125 @@ describe('Background Script Utility Functions', () => {
       expect(FormatExactDuration(-1)).toBe('?');
     });
 
-    test('renders the hourglass and label at both 16 and 32 px', async() => {
-      const imageData = await renderCountdownIcon('29m', '#3d4a58');
+    test('renders the plate at 16, 24, 32 and 48 px without loading any bitmap', async() => {
+      global.fetch = jest.fn();
 
-      expect(imageData).toEqual({ 16: { imageSize: 16 }, 32: { imageSize: 32 } });
-      expect(global.fetch).toHaveBeenCalledWith('chrome-extension://test-id/icons/hourglass16.png');
-      expect(global.fetch).toHaveBeenCalledWith('chrome-extension://test-id/icons/hourglass32.png');
-      const [ctx16, ctx32] = contexts;
-      expect(ctx16.drawImage).toHaveBeenCalledWith(
-        { bitmapOf: 'chrome-extension://test-id/icons/hourglass16.png' }, 0, 0, 16, 16);
-      expect(ctx32.drawImage).toHaveBeenCalledWith(
-        { bitmapOf: 'chrome-extension://test-id/icons/hourglass32.png' }, 0, 0, 32, 32);
-      expect(ctx32.letterSpacing).toBeUndefined();
-      // White pill (h = round(0.5 * 32) = 16) then the inset fill (b = 2)
-      expect(ctx32.roundRect).toHaveBeenNthCalledWith(1, 0, 16, 32, 16, 16 * 0.4);
-      expect(ctx32.roundRect).toHaveBeenNthCalledWith(2, 2, 18, 28, 12, 12 * 0.4);
-      expect(ctx32.fills).toEqual(['#ffffff', '#3d4a58']);
-      expect(ctx32.fillText).toHaveBeenCalledWith('29m', 16, 32 - 16 / 2 + 32 * 0.03);
-      // ceil(0.95 * 12) when the reference text already fits
-      expect(ctx32.font).toBe('bold 12px sans-serif');
+      const imageData = await renderCountdownIcon('28m', ICON_STATES.running);
+
+      expect(imageData).toEqual(ALL_SIZES);
+      expect(global.OffscreenCanvas.mock.calls.map((call) => call[0])).toEqual([16, 24, 32, 48]);
+      expect(global.fetch).not.toHaveBeenCalled();
+      delete global.fetch;
     });
 
-    test('16 px label is taller, has no rim and tightens the letters', async() => {
-      // Record the letter spacing in effect when text is measured and drawn
-      global.OffscreenCanvas = jest.fn((w) => ({
-        getContext: () => {
-          const ctx = makeContext(w);
-          ctx.spacingAtMeasure = [];
-          ctx.measureText = jest.fn(() => {
-            ctx.spacingAtMeasure.push(ctx.letterSpacing);
-            return { width: parseInt(ctx.font.split(' ')[1]) * 2 };
-          });
-          ctx.fillText = jest.fn(() => {
-            ctx.spacingAtDraw = ctx.letterSpacing;
-          });
-          contexts.push(ctx);
-          return ctx;
-        }
-      }));
+    test('draws a rounded gradient plate with a faint edge', async() => {
+      await renderCountdownIcon('28m', ICON_STATES.running);
 
-      await renderCountdownIcon('29m', '#3d4a58');
-
-      const ctx16 = contexts[0];
-      // h = 10: only the state-color rect (0, 6, 16, 10), no white rim
-      expect(ctx16.roundRect).toHaveBeenCalledTimes(1);
-      expect(ctx16.roundRect).toHaveBeenCalledWith(0, 6, 16, 10, 4);
-      expect(ctx16.fills).toEqual(['#3d4a58']);
-      // Starts at ceil(0.95 * 10) = 10px, 2 px wide per px of font, so 8px
-      // is the largest size whose '88m' fits within 16
-      expect(ctx16.measureText).toHaveBeenCalledWith('88m');
-      expect(ctx16.spacingAtMeasure.every((v) => v === '-0.5px')).toBe(true);
-      expect(ctx16.font).toBe('bold 8px sans-serif');
-      expect(ctx16.spacingAtDraw).toBe('-0.5px');
-      expect(ctx16.fillText).toHaveBeenCalledWith('29m', 8, 16 - 10 / 2 + 0.5);
-      // Spacing is reset after drawing
-      expect(ctx16.letterSpacing).toBeUndefined();
+      const ctx = lastContext(32);
+      expect(ctx.roundRect).toHaveBeenNthCalledWith(1, 0, 0, 32, 32, 0.24 * 32);
+      expect(ctx.createLinearGradient).toHaveBeenCalledWith(0, 0, 0, 32);
+      expect(ctx.fills).toEqual([ctx.gradients[0]]);
+      expect(ctx.roundRect).toHaveBeenNthCalledWith(2, 0.5, 0.5, 31, 31, 0.24 * 32);
+      expect(ctx.strokes).toEqual([{ style: 'rgba(255,255,255,0.18)', width: 1 }]);
     });
 
-    test('fits the font to 88m within 0.86 of the icon width, once per size', async() => {
-      // At 32 px the text is 2.6 px wide per px of font, so 10px is the
-      // largest size within 0.86 * 32 = 27.52
-      global.OffscreenCanvas = jest.fn((w) => ({
-        getContext: () => {
-          const ctx = makeContext(w);
-          ctx.measureText = jest.fn(() => ({
-            width: parseInt(ctx.font.split(' ')[1]) * (w === 32 ? 2.6 : 1)
-          }));
-          contexts.push(ctx);
-          return ctx;
-        }
-      }));
+    test('places white digits and a smaller unit as a centered pair', async() => {
+      await renderCountdownIcon('28m', ICON_STATES.running);
 
-      await renderCountdownIcon('5m', '#3d4a58');
-      await renderCountdownIcon('24h', '#3d4a58');
-
-      expect(contexts[1].measureText).toHaveBeenCalledWith('88m');
-      expect(contexts[1].font).toBe('bold 10px sans-serif');
-      // The second render reuses the fitted size for a different label
-      expect(contexts[3].measureText).not.toHaveBeenCalled();
-      expect(contexts[3].font).toBe('bold 10px sans-serif');
+      // At 32 px the fit settles on 18px digits and a 13px unit:
+      // 21.6 + 0.64 + 7.8 = 30.04 <= 0.94 * 32, while 19px gives 31.24
+      const [digits, unit] = lastContext(32).texts;
+      expect(digits).toMatchObject({ text: '28', color: '#ffffff', font: 'bold 18px sans-serif' });
+      expect(unit).toMatchObject({ text: 'm', font: 'bold 13px sans-serif' });
+      expect(digits.x).toBeCloseTo((32 - 30.04) / 2);
+      expect(unit.x).toBeCloseTo((32 - 30.04) / 2 + 21.6 + 0.64);
+      // Baseline at S / 2 + cap / 2 with cap = 0.7 * 18
+      expect(digits.y).toBeCloseTo(16 + 12.6 / 2);
+      expect(unit.y).toBeCloseTo(16 + 12.6 / 2);
+      // 16 px fits 9px digits: 10.8 + 0.32 + 3.6 = 14.72 <= 15.04
+      expect(lastContext(16).texts[0].font).toBe('bold 9px sans-serif');
     });
 
-    test('loads the hourglass bitmaps once per background lifetime', async() => {
-      await renderCountdownIcon('5', '#3d4a58');
-      await renderCountdownIcon('4', '#3d4a58');
+    test('a label without a unit is drawn alone and centered', async() => {
+      await renderCountdownIcon('?', ICON_STATES.running);
 
-      expect(global.fetch).toHaveBeenCalledTimes(2); // one per size, not per render
+      const texts = lastContext(32).texts;
+      expect(texts).toHaveLength(1);
+      expect(texts[0]).toMatchObject({ text: '?', color: '#ffffff' });
+      expect(texts[0].x).toBeCloseTo((32 - 10.8) / 2); // no gap without a unit
     });
 
-    test('running timer sets both icon sizes, empty badge and tooltip', async() => {
+    test('digit size is fitted once per size and reused for every label', async() => {
+      await renderCountdownIcon('5m', ICON_STATES.running);
+      await renderCountdownIcon('24h', ICON_STATES.running);
+
+      const first = contexts.find((ctx) => ctx.size === 32);
+      const second = lastContext(32);
+      expect(first.measureText).toHaveBeenCalledWith('88');
+      expect(second).not.toBe(first);
+      expect(second.measureText).not.toHaveBeenCalledWith('88');
+      expect(first.texts[0].font).toBe('bold 18px sans-serif');
+      expect(second.texts[0].font).toBe('bold 18px sans-serif');
+    });
+
+    test('digit size also keeps the cap height within 0.68 of the icon', async() => {
+      // Narrow text, tall caps: only the cap limit binds, 21 * 1.0 <= 21.76
+      installCanvas((ctx) => {
+        ctx.measureText = jest.fn(() => ({ width: 0, actualBoundingBoxAscent: fontPx(ctx.font) }));
+      });
+
+      await renderCountdownIcon('5m', ICON_STATES.running);
+
+      expect(lastContext(32).texts[0].font).toBe('bold 21px sans-serif');
+    });
+
+    test('cap height falls back to 0.72 of the digit size without the metric', async() => {
+      // 0.72 * 30 = 21.6 <= 21.76, while 0.72 * 31 = 22.32 is too tall
+      installCanvas((ctx) => {
+        ctx.measureText = jest.fn(() => ({ width: 0 }));
+      });
+
+      await renderCountdownIcon('5m', ICON_STATES.running);
+
+      const [digits] = lastContext(32).texts;
+      expect(digits.font).toBe('bold 30px sans-serif');
+      expect(digits.y).toBeCloseTo(16 + 0.72 * 30 / 2);
+    });
+
+    test('each state reaches the canvas with its gradient and unit color', async() => {
+      await renderCountdownIcon('28m', ICON_STATES.running);
+      const running = lastContext(32);
+      await renderCountdownIcon('41s', ICON_STATES.finalMinute);
+      const finalMinute = lastContext(32);
+      await renderCountdownIcon('5m', ICON_STATES.paused);
+      const paused = lastContext(32);
+
+      expect(running.gradients[0].stops).toEqual([[0, '#5a6a82'], [1, '#3a4659']]);
+      expect(finalMinute.gradients[0].stops).toEqual([[0, '#e5483a'], [1, '#b91f14']]);
+      expect(paused.gradients[0].stops).toEqual([[0, '#8a93a3'], [1, '#626a78']]);
+      // Tan unit only while running
+      expect(running.texts[1].color).toBe('#f5cf87');
+      expect(finalMinute.texts[1].color).toBe('rgba(255,255,255,0.85)');
+      expect(paused.texts[1].color).toBe('rgba(255,255,255,0.85)');
+      for (const ctx of [running, finalMinute, paused]) {
+        expect(ctx.texts[0].color).toBe('#ffffff');
+      }
+    });
+
+    test('running timer sets all four icon sizes, empty badge and tooltip', async() => {
       await runWithAlarm(29 * 60000 + 30000);
 
       expect(chrome.action.setIcon).toHaveBeenCalledWith(
-        { tabId: 123, imageData: { 16: { imageSize: 16 }, 32: { imageSize: 32 } } },
-        expect.any(Function)
-      );
+        { tabId: 123, imageData: ALL_SIZES }, expect.any(Function));
       expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
         { tabId: 123, text: '' }, expect.any(Function));
       expect(chrome.action.setTitle).toHaveBeenCalledWith(
         { tabId: 123, title: expect.stringMatching(/^29:30 remaining\nCloses tab at /) },
         expect.any(Function)
       );
-      expect(contexts[0].fillText).toHaveBeenCalledWith('29m', expect.any(Number), expect.any(Number));
-      expect(contexts[1].fills).toEqual(['#ffffff', '#3d4a58']);
+      const ctx = lastContext(32);
+      expect(ctx.texts.map((t) => t.text)).toEqual(['29', 'm']);
+      expect(ctx.gradients[0].stops).toEqual([[0, '#5a6a82'], [1, '#3a4659']]);
     });
 
     test('tooltip says the video pauses for a video tab set to pause', async() => {
@@ -706,11 +757,12 @@ describe('Background Script Utility Functions', () => {
       );
     });
 
-    test('final minute draws the label in red', async() => {
+    test('final minute draws the red plate with seconds', async() => {
       await runWithAlarm(45000);
 
-      expect(contexts[1].fillText).toHaveBeenCalledWith('45s', expect.any(Number), expect.any(Number));
-      expect(contexts[1].fills).toEqual(['#ffffff', '#d92d20']);
+      const ctx = lastContext(32);
+      expect(ctx.texts.map((t) => t.text)).toEqual(['45', 's']);
+      expect(ctx.gradients[0].stops).toEqual([[0, '#e5483a'], [1, '#b91f14']]);
     });
 
     test('falls back to badge text when OffscreenCanvas is undefined', async() => {
@@ -726,30 +778,30 @@ describe('Background Script Utility Functions', () => {
         { tabId: 123, color: '#666666' }, expect.any(Function));
     });
 
-    test('falls back to badge text when the bitmap fetch rejects', async() => {
-      global.fetch = jest.fn(() => Promise.reject(new Error('network down')));
-      jest.spyOn(console, 'error').mockImplementation(() => {});
+    test('falls back to badge text when getContext returns null', async() => {
+      global.OffscreenCanvas = jest.fn(() => ({ getContext: () => null }));
 
       await runWithAlarm(20000);
 
       expect(chrome.action.setIcon).not.toHaveBeenCalledWith(
         expect.objectContaining({ imageData: expect.anything() }), expect.any(Function));
+      expect(chrome.action.setIcon).toHaveBeenCalledWith(
+        { tabId: 123, path: DEFAULT_PATHS }, expect.any(Function));
       expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
         { tabId: 123, text: '0:20' }, expect.any(Function));
       expect(chrome.action.setBadgeBackgroundColor).toHaveBeenCalledWith(
         { tabId: 123, color: '#ff0000' }, expect.any(Function));
     });
 
-    test('timerPaused message draws the gray paused icon and tooltip', async() => {
+    test('timerPaused message draws the gray paused plate and tooltip', async() => {
       sendMessage({ type: 'timerPaused', tabId: 77, timeRemaining: 90000 });
       await flush();
 
       expect(chrome.action.setIcon).toHaveBeenCalledWith(
-        { tabId: 77, imageData: { 16: { imageSize: 16 }, 32: { imageSize: 32 } } },
-        expect.any(Function)
-      );
-      expect(contexts[1].fillText).toHaveBeenCalledWith('1m', expect.any(Number), expect.any(Number));
-      expect(contexts[1].fills).toEqual(['#ffffff', '#6b7280']);
+        { tabId: 77, imageData: ALL_SIZES }, expect.any(Function));
+      const ctx = lastContext(32);
+      expect(ctx.texts.map((t) => t.text)).toEqual(['1', 'm']);
+      expect(ctx.gradients[0].stops).toEqual([[0, '#8a93a3'], [1, '#626a78']]);
       expect(chrome.action.setTitle).toHaveBeenCalledWith(
         { tabId: 77, title: 'Paused, 1:30 remaining' }, expect.any(Function));
       expect(chrome.action.setBadgeText).toHaveBeenCalledWith(
@@ -885,15 +937,16 @@ describe('Background Script Utility Functions', () => {
         { tabId: 123, text: '1:59' }, expect.any(Function));
     });
 
-    // Bitmap decoding that waits for release(), so a render stays pending
-    // while the test delivers newer messages.
-    const deferBitmaps = () => {
-      let release;
-      const gate = new Promise((resolve) => {
-        release = resolve;
+    // Runs deliver() inside the next render, after it has started drawing,
+    // so a newer message lands while that render is underway.
+    const duringNextRender = (deliver) => {
+      let delivered = false;
+      installCanvas(() => {
+        if (!delivered) {
+          delivered = true;
+          deliver();
+        }
       });
-      global.createImageBitmap = jest.fn((blob) => gate.then(() => ({ bitmapOf: blob.url })));
-      return () => release();
     };
 
     test('a pause during the tab check keeps the paused state and icon', async() => {
@@ -925,13 +978,9 @@ describe('Background Script Utility Functions', () => {
     });
 
     test('a stop while the paused icon renders leaves the default icon', async() => {
-      const release = deferBitmaps();
+      duringNextRender(() => sendMessage({ type: 'timerStopped', tabId: 91 }));
 
       sendMessage({ type: 'timerPaused', tabId: 91, timeRemaining: 60000 });
-      await flush();
-      sendMessage({ type: 'timerStopped', tabId: 91 });
-      await flush();
-      release();
       await flush();
 
       const icons = chrome.action.setIcon.mock.calls.map((call) => call[0]);
@@ -941,15 +990,13 @@ describe('Background Script Utility Functions', () => {
     });
 
     test('a resume while the paused icon renders shows the running icon', async() => {
-      const release = deferBitmaps();
       const alarm = { name: '92', scheduledTime: Date.now() + 120000 };
+      duringNextRender(() => {
+        chrome.alarms.getAll.mockImplementation((callback) => callback([alarm]));
+        sendMessage({ type: 'timerStarted', tabId: 92 });
+      });
 
       sendMessage({ type: 'timerPaused', tabId: 92, timeRemaining: 120000 });
-      await flush();
-      chrome.alarms.getAll.mockImplementation((callback) => callback([alarm]));
-      sendMessage({ type: 'timerStarted', tabId: 92 });
-      await flush();
-      release();
       await flush();
       await flush();
 
