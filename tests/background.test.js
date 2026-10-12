@@ -25,15 +25,27 @@ describe('Background Script Utility Functions', () => {
    * Verifies correct formatting of time durations in different scenarios
    */
   describe('FormatDuration', () => {
-    // Test that durations less than an hour are formatted as MM:SS
-    test('formats duration less than an hour correctly', () => {
+    // Test that durations less than ten minutes are formatted as M:SS
+    test('formats duration less than ten minutes correctly', () => {
       expect(FormatDuration(65000)).toBe('1:05'); // 1 minute 5 seconds
       expect(FormatDuration(30000)).toBe('0:30'); // 30 seconds
+      expect(FormatDuration(599000)).toBe('9:59'); // just under ten minutes
+    });
+
+    // Badge text only fits ~4 characters (Firefox truncates hard), so
+    // 10-59 minutes show whole minutes instead of M:SS.
+    test('formats ten minutes to an hour as whole minutes', () => {
+      expect(FormatDuration(600000)).toBe('10m');  // exactly ten minutes
+      expect(FormatDuration(1784000)).toBe('29m'); // 29 minutes 44 seconds
+      expect(FormatDuration(1800000)).toBe('30m'); // exactly thirty minutes
+      expect(FormatDuration(3599000)).toBe('59m'); // just under an hour
     });
 
     // Test that durations more than an hour are formatted correctly
     test('formats duration more than an hour correctly', () => {
       expect(FormatDuration(3665000)).toBe('1:01'); // 1 hour 1 minute
+      expect(FormatDuration(35940000)).toBe('9:59'); // 9 hours 59 minutes
+      expect(FormatDuration(35999000)).toBe('9:59'); // one second under ten hours
     });
 
     // Test that negative durations return a question mark
@@ -46,9 +58,23 @@ describe('Background Script Utility Functions', () => {
       expect(FormatDuration(0)).toBe('0:00');
     });
 
-    // Test that very large durations are formatted correctly
-    test('formats very large durations correctly', () => {
-      expect(FormatDuration(72000000)).toBe('20:00'); // 20 hours
+    // Ten hours and up show whole hours so the badge stays within
+    // ~4 characters ("20:00" would truncate to "20:0" on Firefox).
+    test('formats very large durations as whole hours', () => {
+      expect(FormatDuration(36000000)).toBe('10h'); // exactly ten hours
+      expect(FormatDuration(72000000)).toBe('20h'); // 20 hours
+      expect(FormatDuration(86400000)).toBe('24h'); // longest possible timer
+    });
+
+    test('switches tiers at the ten minute and one hour boundaries', () => {
+      expect(FormatDuration(599500)).toBe('10m');   // ceils up to 600 s
+      expect(FormatDuration(3600000)).toBe('1:00'); // exactly one hour
+    });
+
+    test('never exceeds four characters for any timer up to 24 hours', () => {
+      for (let s = 0; s <= 86400; s++) {
+        expect(FormatDuration(s * 1000).length).toBeLessThanOrEqual(4);
+      }
     });
 
     // Sub-second remainders ceil up so the badge agrees with the popup
