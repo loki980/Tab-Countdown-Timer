@@ -148,7 +148,7 @@ describe('Popup Events', () => {
     $('#startbutton').click();
     await new Promise(r => setTimeout(r, 100));
 
-    expect(chromeMocks.runtime.sendMessage).toHaveBeenCalledWith({ type: 'timerStarted' });
+    expect(chromeMocks.runtime.sendMessage).toHaveBeenCalledWith({ type: 'timerStarted', tabId: 123 });
   });
 
   test('Start Button still creates the alarm when the background is unreachable', async() => {
@@ -200,6 +200,7 @@ describe('Popup Events', () => {
     await new Promise(r => setTimeout(r, 100));
 
     expect(chromeMocks.alarms.clear).toHaveBeenCalledWith('123');
+    expect(chromeMocks.runtime.sendMessage).toHaveBeenCalledWith({ type: 'timerStopped', tabId: 123 });
     expect($('#cancelDiv').is(':visible')).toBe(false);
     expect(pauseBtn.text()).toBe('Pause');
     expect(pauseBtn.hasClass('paused')).toBe(false);
@@ -236,13 +237,45 @@ describe('Popup Events', () => {
 
     expect(pauseBtn.text()).toBe('Resume');
     expect(chromeMocks.alarms.clear).toHaveBeenCalledWith('123');
+    expect(chromeMocks.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'timerPaused',
+      tabId: 123,
+      timeRemaining: expect.any(Number)
+    });
 
     // Second click: Resume
+    chromeMocks.runtime.sendMessage.mockClear();
     pauseBtn.click();
     await new Promise(r => setTimeout(r, 100));
 
     expect(pauseBtn.text()).toBe('Pause');
     expect(chromeMocks.alarms.create).toHaveBeenCalled();
+    expect(chromeMocks.runtime.sendMessage).toHaveBeenCalledWith({ type: 'timerStarted', tabId: 123 });
+  });
+
+  test('Restoring a saved paused timer asks the background for the paused icon', async() => {
+    const { normalizeUrlForStorage } = require('../shared/video-site-utils.js');
+    const urlKey = normalizeUrlForStorage('http://example.com');
+    chromeMocks.tabs.query.mockImplementation((q, cb) => {
+      const tabs = [{ id: 123, url: 'http://example.com' }];
+      if (cb) cb(tabs);
+      return Promise.resolve(tabs);
+    });
+    // Saved pause state for this URL, so the popup restores it on open
+    chromeMocks.storage.local.get.mockImplementation((keys, callback) => {
+      const result = { [urlKey]: { pausedTimeRemaining: 90000, pausedAt: Date.now() } };
+      if (callback) callback(result);
+      return Promise.resolve(result);
+    });
+
+    await loadPopup();
+    await new Promise(r => setTimeout(r, 50));
+
+    expect(chromeMocks.runtime.sendMessage).toHaveBeenCalledWith({
+      type: 'timerPaused',
+      tabId: 123,
+      timeRemaining: 90000
+    });
   });
 
   test('Input validation: Hours and Minutes keys and scroll', async() => {

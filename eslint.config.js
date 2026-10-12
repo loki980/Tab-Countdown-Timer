@@ -9,6 +9,7 @@ module.exports = [
       'coverage/',
       'reports/',
       'dist/',
+      '.claude/',
       '**/*.min.js'
     ]
   },

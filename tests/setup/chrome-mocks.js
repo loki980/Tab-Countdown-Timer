@@ -46,6 +46,14 @@ const createChromeMocks = () => {
       setBadgeText: jest.fn((options, callback) => {
         if (callback) callback();
         return Promise.resolve();
+      }),
+      setIcon: jest.fn((options, callback) => {
+        if (callback) callback();
+        return Promise.resolve();
+      }),
+      setTitle: jest.fn((options, callback) => {
+        if (callback) callback();
+        return Promise.resolve();
       })
     },
     storage: {
@@ -75,7 +83,8 @@ const createChromeMocks = () => {
     runtime: {
       lastError: null,
       onMessage: { addListener: jest.fn() },
-      sendMessage: jest.fn(() => Promise.resolve())
+      sendMessage: jest.fn(() => Promise.resolve()),
+      getURL: jest.fn((path) => 'chrome-extension://test-id/' + path)
     }
   };
 };
